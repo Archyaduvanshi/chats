@@ -12,6 +12,9 @@ A full-stack realtime chat app built with React, Node.js, Express, Socket.io, an
 - Online user list
 - Typing indicator
 - Delivered/read status
+- Message options menu with copy, edit, and delete actions
+- Sender-only message editing within 1 minute of sending
+- Sender-only message deletion
 - MongoDB storage when `MONGODB_URI` is configured
 - Local JSON fallback storage for development
 
@@ -174,6 +177,7 @@ https://github.com/Archyaduvanshi/chats.git
 - Record your app in action (2-3 minutes):
   - Login with username
   - Send messages in real-time
+  - Copy, edit, and delete messages from the 3-dot message menu
   - Show messages appearing in multiple windows
   - Display responsive design
 - Upload to Google Drive and share link
@@ -247,6 +251,8 @@ VITE_SOCKET_URL=https://chat-backend.onrender.com
 - `GET /api/messages` - fetch chat history
 - `POST /api/messages` - send a message
 - `PATCH /api/messages/read` - mark messages as read for a username
+- `PATCH /api/messages/:id` - edit a sender's message within 1 minute
+- `DELETE /api/messages/:id` - delete a sender's message
 
 Example `POST /api/messages` body:
 
@@ -257,11 +263,32 @@ Example `POST /api/messages` body:
 }
 ```
 
+Example `PATCH /api/messages/:id` body:
+
+```json
+{
+  "username": "Arch",
+  "text": "Updated message"
+}
+```
+
+Example `DELETE /api/messages/:id` body:
+
+```json
+{
+  "username": "Arch"
+}
+```
+
 ## Socket.io Events
 
 - `user:join` - register the username for online status
 - `message:send` - send a message in realtime
 - `message:new` - receive a new message
+- `message:edit` - edit a sender's message within 1 minute
+- `message:updated` - receive an edited message
+- `message:delete` - delete a sender's message
+- `message:deleted` - remove a deleted message from clients
 - `users:online` - receive online users
 - `typing:start` / `typing:stop` - typing indicator
 - `messages:read` - update read status

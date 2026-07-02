@@ -261,9 +261,11 @@ button {
 
 .message-bubble {
   max-width: min(68%, 680px);
+  min-width: min(220px, 88vw);
   border-radius: 8px;
   padding: 12px 14px;
   background: #eef3f8;
+  position: relative;
 }
 
 .message-row.own .message-bubble {
@@ -280,6 +282,77 @@ button {
   font-size: 0.8rem;
 }
 
+.message-meta-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.message-menu {
+  position: relative;
+}
+
+.message-menu-button,
+.message-menu-popover button,
+.message-edit button {
+  border: 0;
+}
+
+.message-menu-button {
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(24, 32, 47, 0.08);
+  color: inherit;
+}
+
+.message-row.own .message-menu-button {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.message-menu-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 4;
+  width: 142px;
+  padding: 6px;
+  border: 1px solid #dce4ef;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #18202f;
+  box-shadow: 0 16px 40px rgba(25, 32, 46, 0.16);
+}
+
+.message-menu-popover button {
+  width: 100%;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 6px;
+  padding: 7px 8px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.message-menu-popover button:hover:not(:disabled) {
+  background: #eef3f8;
+}
+
+.message-menu-popover button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.message-menu-popover .danger {
+  color: #9b2f20;
+}
+
 .message-meta span,
 .receipt {
   opacity: 0.78;
@@ -289,6 +362,46 @@ button {
   margin: 0;
   overflow-wrap: anywhere;
   line-height: 1.45;
+}
+
+.edited-label {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 0.72rem;
+  opacity: 0.72;
+}
+
+.message-edit {
+  display: grid;
+  grid-template-columns: 1fr 34px 34px;
+  gap: 7px;
+}
+
+.message-edit input {
+  min-width: 0;
+  min-height: 36px;
+  border: 1px solid rgba(24, 32, 47, 0.18);
+  border-radius: 8px;
+  padding: 0 10px;
+  outline: none;
+}
+
+.message-edit button {
+  width: 34px;
+  height: 36px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(24, 32, 47, 0.1);
+  color: inherit;
+}
+
+.message-row.own .message-edit input {
+  border-color: rgba(255, 255, 255, 0.34);
+}
+
+.message-row.own .message-edit button {
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .receipt {

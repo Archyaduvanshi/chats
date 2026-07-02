@@ -5,7 +5,13 @@ import MessageComposer from './components/MessageComposer';
 import MessageList from './components/MessageList';
 import UserList from './components/UserList';
 import { useChatSocket } from './hooks/useChatSocket';
-import { fetchMessages, markMessagesRead, sendMessage } from './services/api';
+import {
+  deleteMessage,
+  editMessage,
+  fetchMessages,
+  markMessagesRead,
+  sendMessage,
+} from './services/api';
 import './App.css';
 
 const App = () => {
@@ -27,6 +33,20 @@ const App = () => {
     });
   }, []);
 
+  const updateMessageInList = useCallback((updatedMessage) => {
+    setMessages((currentMessages) =>
+      currentMessages.map((message) =>
+        message.id === updatedMessage.id ? updatedMessage : message
+      )
+    );
+  }, []);
+
+  const removeMessageFromList = useCallback((messageId) => {
+    setMessages((currentMessages) =>
+      currentMessages.filter((message) => message.id !== messageId)
+    );
+  }, []);
+
   const replaceMessages = useCallback((nextMessages) => {
     setMessages(nextMessages);
   }, []);
@@ -35,12 +55,16 @@ const App = () => {
     isConnected,
     onlineUsers,
     typingUsers,
+    deleteSocketMessage,
+    editSocketMessage,
     sendSocketMessage,
     startTyping,
     stopTyping,
   } = useChatSocket({
     username,
     onMessage: mergeMessage,
+    onMessageDelete: removeMessageFromList,
+    onMessageUpdate: updateMessageInList,
     onReadUpdate: replaceMessages,
   });
 
@@ -103,6 +127,46 @@ const App = () => {
     }
   };
 
+  const handleCopyMessage = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setError('');
+    } catch {
+      setError('Unable to copy message.');
+    }
+  };
+
+  const handleEditMessage = async (message, text) => {
+    try {
+      setError('');
+      const payload = { id: message.id, username, text };
+      if (isConnected) {
+        await editSocketMessage(payload);
+      } else {
+        const updatedMessage = await editMessage(payload);
+        updateMessageInList(updatedMessage);
+      }
+    } catch (editError) {
+      setError(editError.message);
+      throw editError;
+    }
+  };
+
+  const handleDeleteMessage = async (message) => {
+    try {
+      setError('');
+      const payload = { id: message.id, username };
+      if (isConnected) {
+        await deleteSocketMessage(payload);
+      } else {
+        await deleteMessage(payload);
+        removeMessageFromList(message.id);
+      }
+    } catch (deleteError) {
+      setError(deleteError.message);
+    }
+  };
+
   if (!username) {
     return (
       <>
@@ -131,7 +195,14 @@ const App = () => {
           {isLoading ? (
             <div className="empty-state">Loading messages...</div>
           ) : (
-            <MessageList messages={messages} username={username} typingUsers={typingUsers} />
+            <MessageList
+              messages={messages}
+              username={username}
+              typingUsers={typingUsers}
+              onCopyMessage={handleCopyMessage}
+              onDeleteMessage={handleDeleteMessage}
+              onEditMessage={handleEditMessage}
+            />
           )}
           <MessageComposer
             value={messageText}

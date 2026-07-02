@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createChatSocket } from '../services/socket';
 
-export const useChatSocket = ({ username, onMessage, onReadUpdate }) => {
+export const useChatSocket = ({
+  username,
+  onMessage,
+  onMessageDelete,
+  onMessageUpdate,
+  onReadUpdate,
+}) => {
   const socket = useMemo(() => createChatSocket(), []);
   const [isConnected, setIsConnected] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState([]);
@@ -32,6 +38,8 @@ export const useChatSocket = ({ username, onMessage, onReadUpdate }) => {
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
     socket.on('message:new', onMessage);
+    socket.on('message:updated', onMessageUpdate);
+    socket.on('message:deleted', ({ id }) => onMessageDelete(id));
     socket.on('users:online', setOnlineUsers);
     socket.on('typing:start', handleTypingStart);
     socket.on('typing:stop', handleTypingStop);
@@ -43,13 +51,15 @@ export const useChatSocket = ({ username, onMessage, onReadUpdate }) => {
       socket.off('connect', handleConnect);
       socket.off('disconnect', handleDisconnect);
       socket.off('message:new', onMessage);
+      socket.off('message:updated', onMessageUpdate);
+      socket.off('message:deleted');
       socket.off('users:online', setOnlineUsers);
       socket.off('typing:start', handleTypingStart);
       socket.off('typing:stop', handleTypingStop);
       socket.off('messages:read');
       socket.disconnect();
     };
-  }, [onMessage, onReadUpdate, socket, username]);
+  }, [onMessage, onMessageDelete, onMessageUpdate, onReadUpdate, socket, username]);
 
   const sendSocketMessage = (payload) =>
     new Promise((resolve, reject) => {
@@ -59,6 +69,28 @@ export const useChatSocket = ({ username, onMessage, onReadUpdate }) => {
           return;
         }
         reject(new Error(response?.error || 'Unable to send message.'));
+      });
+    });
+
+  const editSocketMessage = (payload) =>
+    new Promise((resolve, reject) => {
+      socket.emit('message:edit', payload, (response) => {
+        if (response?.ok) {
+          resolve(response.message);
+          return;
+        }
+        reject(new Error(response?.error || 'Unable to edit message.'));
+      });
+    });
+
+  const deleteSocketMessage = (payload) =>
+    new Promise((resolve, reject) => {
+      socket.emit('message:delete', payload, (response) => {
+        if (response?.ok) {
+          resolve(response.id);
+          return;
+        }
+        reject(new Error(response?.error || 'Unable to delete message.'));
       });
     });
 
@@ -81,6 +113,8 @@ export const useChatSocket = ({ username, onMessage, onReadUpdate }) => {
     isConnected,
     onlineUsers,
     typingUsers,
+    deleteSocketMessage,
+    editSocketMessage,
     sendSocketMessage,
     startTyping,
     stopTyping,

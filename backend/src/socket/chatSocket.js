@@ -30,6 +30,28 @@ const registerChatSocket = (io) => {
       }
     });
 
+    socket.on('message:edit', async (payload, ack) => {
+      try {
+        const message = await messageService.updateMessage(payload?.id, payload);
+        io.emit('message:updated', message);
+        ack?.({ ok: true, message });
+      } catch (error) {
+        ack?.({ ok: false, error: error.message || 'Unable to edit message.' });
+        socket.emit('socket:error', error.message || 'Unable to edit message.');
+      }
+    });
+
+    socket.on('message:delete', async (payload, ack) => {
+      try {
+        const result = await messageService.deleteMessage(payload?.id, payload?.username);
+        io.emit('message:deleted', result);
+        ack?.({ ok: true, ...result });
+      } catch (error) {
+        ack?.({ ok: false, error: error.message || 'Unable to delete message.' });
+        socket.emit('socket:error', error.message || 'Unable to delete message.');
+      }
+    });
+
     socket.on('typing:start', (username) => {
       socket.broadcast.emit('typing:start', String(username || '').trim().slice(0, 32));
     });

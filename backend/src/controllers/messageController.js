@@ -29,8 +29,30 @@ const readMessages = async (req, res, next) => {
   }
 };
 
+const editMessage = async (req, res, next) => {
+  try {
+    const message = await messageService.updateMessage(req.params.id, req.body);
+    req.app.get('io')?.emit('message:updated', message);
+    res.json({ message });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const removeMessage = async (req, res, next) => {
+  try {
+    const result = await messageService.deleteMessage(req.params.id, req.body.username);
+    req.app.get('io')?.emit('message:deleted', result);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
+  editMessage,
   fetchMessages,
+  removeMessage,
   sendMessage,
   readMessages,
 };

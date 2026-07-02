@@ -35,6 +35,11 @@ const sanitizeMessage = ({ username, text }) => {
   return { username: cleanUsername, text: cleanText };
 };
 
+const sanitizeUsername = (username) => String(username || '').trim().slice(0, 32);
+
+const canEditMessage = (message) =>
+  Date.now() - new Date(message.createdAt).getTime() <= 60 * 1000;
+
 const toClientMessage = (message) => {
   const raw = message.toObject ? message.toObject() : message;
 
@@ -46,6 +51,7 @@ const toClientMessage = (message) => {
     readBy: raw.readBy || [],
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt || raw.createdAt,
+    editedAt: raw.editedAt,
   };
 };
 
@@ -101,7 +107,7 @@ const getMessages = async () => {
 };
 
 const markMessagesRead = async (username) => {
-  const cleanUsername = String(username || '').trim().slice(0, 32);
+  const cleanUsername = sanitizeUsername(username);
   if (!cleanUsername) return [];
 
   if (usingMongo()) {
@@ -122,8 +128,92 @@ const markMessagesRead = async (username) => {
   return updatedMessages.slice(-100).map(toClientMessage);
 };
 
+const updateMessage = async (id, payload) => {
+  const { username, text } = sanitizeMessage(payload);
+
+  if (usingMongo()) {
+    const message = await Message.findById(id);
+    if (!message) {
+      throw Object.assign(new Error('Message not found.'), { status: 404 });
+    }
+    if (message.username !== username) {
+      throw Object.assign(new Error('Only the sender can edit this message.'), { status: 403 });
+    }
+    if (!canEditMessage(message)) {
+      throw Object.assign(new Error('Messages can only be edited within 1 minute.'), { status: 403 });
+    }
+
+    const encrypted = encryptText(text);
+    message.cipherText = encrypted.cipherText;
+    message.iv = encrypted.iv;
+    message.tag = encrypted.tag;
+    message.editedAt = new Date();
+    await message.save();
+    return toClientMessage(message);
+  }
+
+  const messages = await readFileMessages();
+  const messageIndex = messages.findIndex((message) => String(message.id) === String(id));
+  if (messageIndex === -1) {
+    throw Object.assign(new Error('Message not found.'), { status: 404 });
+  }
+
+  const message = messages[messageIndex];
+  if (message.username !== username) {
+    throw Object.assign(new Error('Only the sender can edit this message.'), { status: 403 });
+  }
+  if (!canEditMessage(message)) {
+    throw Object.assign(new Error('Messages can only be edited within 1 minute.'), { status: 403 });
+  }
+
+  const encrypted = encryptText(text);
+  const editedAt = new Date().toISOString();
+  messages[messageIndex] = {
+    ...message,
+    ...encrypted,
+    updatedAt: editedAt,
+    editedAt,
+  };
+  await writeFileMessages(messages);
+  return toClientMessage(messages[messageIndex]);
+};
+
+const deleteMessage = async (id, username) => {
+  const cleanUsername = sanitizeUsername(username);
+  if (!cleanUsername) {
+    throw Object.assign(new Error('Username is required.'), { status: 400 });
+  }
+
+  if (usingMongo()) {
+    const message = await Message.findById(id);
+    if (!message) {
+      throw Object.assign(new Error('Message not found.'), { status: 404 });
+    }
+    if (message.username !== cleanUsername) {
+      throw Object.assign(new Error('Only the sender can delete this message.'), { status: 403 });
+    }
+    await Message.deleteOne({ _id: id });
+    return { id: String(id) };
+  }
+
+  const messages = await readFileMessages();
+  const messageIndex = messages.findIndex((message) => String(message.id) === String(id));
+  if (messageIndex === -1) {
+    throw Object.assign(new Error('Message not found.'), { status: 404 });
+  }
+  if (messages[messageIndex].username !== cleanUsername) {
+    throw Object.assign(new Error('Only the sender can delete this message.'), { status: 403 });
+  }
+
+  messages.splice(messageIndex, 1);
+  await writeFileMessages(messages);
+  return { id: String(id) };
+};
+
 module.exports = {
   createMessage,
+  deleteMessage,
   getMessages,
   markMessagesRead,
+  updateMessage,
 };

@@ -1,7 +1,14 @@
 import { useEffect, useRef } from 'react';
 import MessageBubble from './MessageBubble';
 
-const MessageList = ({ messages, username, typingUsers }) => {
+const MessageList = ({
+  messages,
+  username,
+  typingUsers,
+  onCopyMessage,
+  onDeleteMessage,
+  onEditMessage,
+}) => {
   const endRef = useRef(null);
 
   useEffect(() => {
@@ -18,6 +25,9 @@ const MessageList = ({ messages, username, typingUsers }) => {
             key={message.id}
             message={message}
             isOwn={message.username === username}
+            onCopy={onCopyMessage}
+            onDelete={onDeleteMessage}
+            onEdit={onEditMessage}
           />
         ))
       )}

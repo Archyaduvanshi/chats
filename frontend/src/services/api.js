@@ -38,3 +38,19 @@ export const markMessagesRead = async (username) => {
   });
   return data.messages || [];
 };
+
+export const editMessage = async ({ id, username, text }) => {
+  const data = await request(`/api/messages/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ username, text }),
+  });
+  return data.message;
+};
+
+export const deleteMessage = async ({ id, username }) => {
+  const data = await request(`/api/messages/${id}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ username }),
+  });
+  return data.id;
+};
