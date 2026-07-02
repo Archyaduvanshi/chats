@@ -43,11 +43,17 @@ frontend/
     utils/
 ```
 
-## Backend Setup
+## Quick Start - Local Development
+
+### Backend Setup
 
 ```bash
 cd backend
 npm install
+npm start
+```
+
+Backend runs on: `http://localhost:5000`
 npm run dev
 ```
 
@@ -85,159 +91,111 @@ VITE_API_URL=http://localhost:5000
 VITE_SOCKET_URL=http://localhost:5000
 ```
 
-## Deploy on Render
+## Deployment Instructions
 
-This project should be deployed as two Render services:
+### Live Demo
+**Deployed Application**: https://chat-backend.onrender.com
 
-- Backend: Render Web Service
-- Frontend: Render Static Site
+### Step 1: MongoDB Atlas Setup
 
-You also need a MongoDB database. MongoDB Atlas is recommended for deployment.
+1. Go to [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
+2. Create a free cluster (M0)
+3. Create database user with credentials
+4. Whitelist IP: `0.0.0.0/0` (for development)
+5. Get connection string: `mongodb+srv://username:password@cluster.mongodb.net/chatdb`
 
-### 1. Push the Project to GitHub
+### Step 2: Deploy Backend on Render
 
-Render deploys from a Git repository.
+1. Go to [Render Dashboard](https://render.com)
+2. Click **New** → **Web Service**
+3. Select your GitHub repo
+4. Configuration:
+   ```
+   Name: chat-backend
+   Build Command: cd backend && npm install
+   Start Command: cd backend && npm start
+   Root Directory: (leave empty)
+   ```
+5. Environment Variables (click Advanced):
+   ```
+   MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/chatdb
+   CLIENT_URL=https://your-frontend-url.onrender.com
+   MESSAGE_SECRET=your-secret-key-here
+   PORT=5000
+   ```
+6. Click **Create Web Service**
+7. Wait 5-10 minutes for deployment
+8. Copy backend URL (e.g., `https://chat-backend.onrender.com`)
 
-```bash
-git init
-git add .
-git commit -m "Initial realtime chat app"
-git branch -M main
-git remote add origin https://github.com/your-username/your-repo-name.git
-git push -u origin main
+### Step 3: Deploy Frontend on Render
+
+1. Click **New** → **Static Site**
+2. Select your GitHub repo
+3. Configuration:
+   ```
+   Name: chat-frontend
+   Build Command: cd frontend && npm install && npm run build
+   Publish Directory: frontend/dist
+   ```
+4. Environment Variables:
+   ```
+   VITE_API_URL=https://chat-backend.onrender.com
+   VITE_SOCKET_URL=https://chat-backend.onrender.com
+   ```
+5. Click **Create Static Site**
+6. Wait 5 minutes for deployment
+7. Copy frontend URL
+
+### Step 4: Update Backend CORS
+
+Update backend environment variable:
+```
+CLIENT_URL=https://your-frontend-url.onrender.com
 ```
 
-If the project is already on GitHub, push your latest changes.
+---
 
-### 2. Create MongoDB Atlas Database
+---
 
-1. Go to MongoDB Atlas.
-2. Create a free cluster.
-3. Create a database user.
-4. Allow network access.
-5. Copy your MongoDB connection string.
+## Project Submission Requirements
 
-The connection string looks like this:
+### ✅ Checklist for Course/Assignment Submission
 
-```txt
-mongodb+srv://username:password@cluster-name.mongodb.net/chat-app
+**1. GitHub Repository Link**
+```
+https://github.com/Archyaduvanshi/chats.git
 ```
 
-Use this value as `MONGODB_URI` in Render.
+**2. Live Deployed Application**
+- Frontend: `https://chat-frontend.onrender.com`
+- Backend API: `https://chat-backend.onrender.com`
 
-### 3. Deploy the Backend on Render
+**3. Screen Recording**
+- Record your app in action (2-3 minutes):
+  - Login with username
+  - Send messages in real-time
+  - Show messages appearing in multiple windows
+  - Display responsive design
+- Upload to Google Drive and share link
 
-1. Open the Render Dashboard.
-2. Click New > Web Service.
-3. Connect your GitHub repository.
-4. Configure the backend service:
+**4. Google Drive Link**
+- Share screen recording: [Your Google Drive Link]
 
-```txt
-Name: chat-backend
-Root Directory: backend
-Runtime: Node
-Build Command: npm install
-Start Command: npm run start
+**5. README with Setup Instructions** ✓
+- This file includes:
+  - Project structure
+  - Local development setup
+  - Deployment instructions
+  - Features overview
+
+**6. Submission Template**
 ```
-
-5. Add backend environment variables:
-
-```env
-MONGODB_URI=your_mongodb_atlas_connection_string
-MESSAGE_SECRET=your_long_random_secret_key
-CLIENT_URL=https://your-frontend-service-name.onrender.com
+Project: Realtime Chat Application
+GitHub: https://github.com/Archyaduvanshi/chats.git
+Live Demo: https://chat-frontend.onrender.com
+Screen Recording: [Google Drive Link]
+Tech Stack: React, Node.js, Express, Socket.io, MongoDB
 ```
-
-Do not add `PORT` on Render unless you need a custom setting. Render provides the port automatically.
-
-6. Click Create Web Service.
-7. After deployment, copy the backend URL.
-
-Example backend URL:
-
-```txt
-https://chat-backend.onrender.com
-```
-
-Test the backend:
-
-```txt
-https://chat-backend.onrender.com/api/health
-```
-
-You should see:
-
-```json
-{
-  "ok": true,
-  "service": "chat-api"
-}
-```
-
-### 4. Deploy the Frontend on Render
-
-1. Open the Render Dashboard.
-2. Click New > Static Site.
-3. Connect the same GitHub repository.
-4. Configure the frontend service:
-
-```txt
-Name: chat-frontend
-Root Directory: frontend
-Build Command: npm install && npm run build
-Publish Directory: dist
-```
-
-5. Add frontend environment variables:
-
-```env
-VITE_API_URL=https://chat-backend.onrender.com
-VITE_SOCKET_URL=https://chat-backend.onrender.com
-```
-
-Replace `https://chat-backend.onrender.com` with your real backend Render URL.
-
-6. Click Create Static Site.
-7. After deployment, copy the frontend URL.
-
-Example frontend URL:
-
-```txt
-https://chat-frontend.onrender.com
-```
-
-### 5. Update Backend CORS After Frontend Deploy
-
-After the frontend is deployed, go back to the backend service on Render and update:
-
-```env
-CLIENT_URL=https://chat-frontend.onrender.com
-```
-
-If you want to allow local development and production at the same time:
-
-```env
-CLIENT_URL=http://localhost:5173,http://127.0.0.1:5173,https://chat-frontend.onrender.com
-```
-
-Save the environment variable and redeploy the backend.
-
-### 6. Final Deployment Test
-
-Open your frontend URL:
-
-```txt
-https://chat-frontend.onrender.com
-```
-
-Test with two browser tabs or two devices:
-
-1. Open the frontend URL.
-2. Enter a username.
-3. Open the same URL in another tab or device.
-4. Enter a different username.
-5. Send a message.
-6. The message should appear instantly in both places.
 
 ### Render Troubleshooting
 
