@@ -15,12 +15,13 @@ A full-stack realtime chat app built with React, Node.js, Express, Socket.io, an
 - Message options menu with copy, edit, and delete actions
 - Sender-only message editing within 1 minute of sending
 - Sender-only message deletion
+- Fully responsive Tailwind CSS interface
 - MongoDB storage when `MONGODB_URI` is configured
 - Local JSON fallback storage for development
 
 ## Tech Stack
 
-- Frontend: React, Vite, Socket.io Client
+- Frontend: React, Vite, Tailwind CSS, Socket.io Client
 - Backend: Node.js, Express, Socket.io
 - Database: MongoDB with Mongoose
 - Encryption: AES-256-GCM encryption at rest
@@ -44,7 +45,10 @@ frontend/
     hooks/
     services/
     utils/
+    index.css
 ```
+
+The frontend styling uses Tailwind utility classes directly in React components. `frontend/src/index.css` only keeps Tailwind import and small global base styles.
 
 ## Quick Start - Local Development
 
@@ -198,7 +202,7 @@ Project: Realtime Chat Application
 GitHub: https://github.com/Archyaduvanshi/chats.git
 Live Demo: https://chat-frontend.onrender.com
 Screen Recording: [Google Drive Link]
-Tech Stack: React, Node.js, Express, Socket.io, MongoDB
+Tech Stack: React, Tailwind CSS, Node.js, Express, Socket.io, MongoDB
 ```
 
 ### Render Troubleshooting
@@ -296,6 +300,7 @@ Example `DELETE /api/messages/:id` body:
 ## Design Decisions
 
 - React web was used because the existing project is a Vite React app.
+- Tailwind CSS is used for the responsive UI, with component-level utility classes instead of a separate `App.css` stylesheet.
 - Socket.io is the primary realtime channel. REST APIs are still available for sending and fetching messages.
 - Messages are encrypted at rest with AES-256-GCM before being stored.
 - MongoDB is supported through Mongoose, but a JSON fallback keeps the app runnable without local MongoDB setup.

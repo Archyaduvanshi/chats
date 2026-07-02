@@ -86,17 +86,23 @@ const MessageBubble = ({ message, isOwn, onCopy, onDelete, onEdit }) => {
     onDelete(message);
   };
 
+  const bubbleClassName = `relative min-w-[min(220px,88vw)] max-w-[88%] rounded-lg px-3.5 py-3 sm:max-w-[min(68%,680px)] ${
+    isOwn ? 'bg-[#1d6c8a] text-white' : 'bg-[#eef3f8] text-[#18202f]'
+  }`;
+
   return (
-    <article className={`message-row ${isOwn ? 'own' : ''}`}>
-      <div className="message-bubble">
-        <div className="message-meta">
+    <article className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
+      <div className={bubbleClassName}>
+        <div className="mb-[7px] flex items-center justify-between gap-3 text-[0.8rem]">
           <strong>{message.username}</strong>
-          <div className="message-meta-actions">
-            <span>{formatMessageTime(message.createdAt)}</span>
-            <div className="message-menu" ref={menuRef}>
+          <div className="inline-flex flex-none items-center gap-1.5">
+            <span className="opacity-80">{formatMessageTime(message.createdAt)}</span>
+            <div className="relative" ref={menuRef}>
               <button
                 type="button"
-                className="message-menu-button"
+                className={`inline-grid h-7 w-7 place-items-center rounded-lg border-0 text-inherit ${
+                  isOwn ? 'bg-white/15' : 'bg-[#18202f]/10'
+                }`}
                 onClick={() => setIsMenuOpen((current) => !current)}
                 aria-label="Message options"
                 aria-expanded={isMenuOpen}
@@ -104,18 +110,31 @@ const MessageBubble = ({ message, isOwn, onCopy, onDelete, onEdit }) => {
                 <MoreVertical size={16} />
               </button>
               {isMenuOpen && (
-                <div className="message-menu-popover">
-                  <button type="button" onClick={handleCopy}>
+                <div className="absolute top-[calc(100%+6px)] right-0 z-40 w-[142px] rounded-lg border border-[#dce4ef] bg-white p-1.5 text-[#18202f] shadow-[0_16px_40px_rgba(25,32,46,0.16)]">
+                  <button
+                    className="flex min-h-[34px] w-full items-center gap-2 rounded-md border-0 bg-transparent px-2 py-[7px] text-left text-inherit hover:bg-[#eef3f8]"
+                    type="button"
+                    onClick={handleCopy}
+                  >
                     <Copy size={15} />
                     Copy
                   </button>
                   {isOwn && (
                     <>
-                      <button type="button" onClick={handleEditStart} disabled={!canEdit}>
+                      <button
+                        className="flex min-h-[34px] w-full items-center gap-2 rounded-md border-0 bg-transparent px-2 py-[7px] text-left text-inherit hover:bg-[#eef3f8] disabled:cursor-not-allowed disabled:opacity-45"
+                        type="button"
+                        onClick={handleEditStart}
+                        disabled={!canEdit}
+                      >
                         <Pencil size={15} />
                         Edit
                       </button>
-                      <button type="button" onClick={handleDelete} className="danger">
+                      <button
+                        className="flex min-h-[34px] w-full items-center gap-2 rounded-md border-0 bg-transparent px-2 py-[7px] text-left text-[#9b2f20] hover:bg-[#eef3f8]"
+                        type="button"
+                        onClick={handleDelete}
+                      >
                         <Trash2 size={15} />
                         Delete
                       </button>
@@ -127,8 +146,13 @@ const MessageBubble = ({ message, isOwn, onCopy, onDelete, onEdit }) => {
           </div>
         </div>
         {isEditing ? (
-          <div className="message-edit">
+          <div className="grid grid-cols-[1fr_34px_34px] gap-[7px]">
             <input
+              className={`min-h-9 min-w-0 rounded-lg px-2.5 outline-none ${
+                isOwn
+                  ? 'border border-white/35 bg-white text-[#18202f]'
+                  : 'border border-[#18202f]/20 bg-white text-[#18202f]'
+              }`}
               value={editText}
               onChange={(event) => setEditText(event.target.value)}
               maxLength={1000}
@@ -136,6 +160,9 @@ const MessageBubble = ({ message, isOwn, onCopy, onDelete, onEdit }) => {
               disabled={isSaving}
             />
             <button
+              className={`inline-grid h-9 w-[34px] place-items-center rounded-lg border-0 ${
+                isOwn ? 'bg-white/20 text-white' : 'bg-[#18202f]/10 text-inherit'
+              } disabled:cursor-not-allowed disabled:opacity-50`}
               type="button"
               onClick={handleEditSave}
               disabled={isSaving || !editText.trim()}
@@ -144,6 +171,9 @@ const MessageBubble = ({ message, isOwn, onCopy, onDelete, onEdit }) => {
               <Check size={16} />
             </button>
             <button
+              className={`inline-grid h-9 w-[34px] place-items-center rounded-lg border-0 ${
+                isOwn ? 'bg-white/20 text-white' : 'bg-[#18202f]/10 text-inherit'
+              } disabled:cursor-not-allowed disabled:opacity-50`}
               type="button"
               onClick={() => {
                 setIsEditing(false);
@@ -156,13 +186,15 @@ const MessageBubble = ({ message, isOwn, onCopy, onDelete, onEdit }) => {
             </button>
           </div>
         ) : (
-          <p>
+          <p className="m-0 leading-[1.45] break-words [overflow-wrap:anywhere]">
             {message.text}
-            {message.editedAt && <span className="edited-label">edited</span>}
+            {message.editedAt && (
+              <span className="ml-2 inline-block text-[0.72rem] opacity-70">edited</span>
+            )}
           </p>
         )}
         {isOwn && (
-          <span className="receipt">
+          <span className="mt-2 inline-flex w-full items-center justify-end gap-1.5 whitespace-nowrap rounded-full text-[0.76rem] opacity-80">
             <CheckCheck size={14} />
             {message.readBy?.length > 1 ? 'Read' : 'Delivered'}
           </span>

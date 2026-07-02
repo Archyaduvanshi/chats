@@ -12,7 +12,6 @@ import {
   markMessagesRead,
   sendMessage,
 } from './services/api';
-import './App.css';
 
 const App = () => {
   const [draftUsername, setDraftUsername] = useState(
@@ -175,25 +174,33 @@ const App = () => {
           setUsername={setDraftUsername}
           onLogin={handleLogin}
         />
-        {error && <div className="toast">{error}</div>}
+        {error && (
+          <div className="fixed top-4 left-1/2 z-10 max-w-[min(92vw,520px)] -translate-x-1/2 rounded-lg bg-[#8d2a1d] px-3.5 py-3 text-white shadow-[0_16px_40px_rgba(25,32,46,0.18)]">
+            {error}
+          </div>
+        )}
       </>
     );
   }
 
   return (
-    <main className="app-shell">
+    <main className="grid min-h-screen grid-rows-[auto_1fr]">
       <ChatHeader
         username={username}
         isConnected={isConnected}
         onlineCount={onlineUsers.length}
         onLogout={handleLogout}
       />
-      {error && <div className="toast">{error}</div>}
-      <div className="chat-layout">
+      {error && (
+        <div className="fixed top-4 left-1/2 z-10 max-w-[min(92vw,520px)] -translate-x-1/2 rounded-lg bg-[#8d2a1d] px-3.5 py-3 text-white shadow-[0_16px_40px_rgba(25,32,46,0.18)]">
+          {error}
+        </div>
+      )}
+      <div className="grid min-h-0 grid-cols-1 grid-rows-[auto_1fr] gap-4 px-4 py-4 sm:px-6 lg:grid-cols-[minmax(190px,260px)_1fr] lg:grid-rows-1 lg:gap-[18px] lg:px-10 lg:py-[18px]">
         <UserList onlineUsers={onlineUsers} />
-        <section className="chat-panel">
+        <section className="grid min-h-[68vh] grid-rows-[1fr_auto] overflow-hidden rounded-lg border border-[#dce4ef] bg-white lg:min-h-0">
           {isLoading ? (
-            <div className="empty-state">Loading messages...</div>
+            <div className="m-auto text-center text-[#687384]">Loading messages...</div>
           ) : (
             <MessageList
               messages={messages}
