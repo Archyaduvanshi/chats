@@ -4,18 +4,10 @@ const authService = require('../services/authService');
 
 const requireAuth = async (req, res, next) => {
   try {
-    const header = req.headers.authorization || '';
-    const token = header.startsWith('Bearer ') ? header.slice(7) : '';
-
-    if (!token) {
-      throw Object.assign(new Error('Login is required.'), { status: 401 });
-    }
-
-    const payload = jwt.verify(token, env.jwtSecret);
-    const user = await authService.findApprovedUserById(payload.id);
-    if (!user) {
-      throw Object.assign(new Error('User is not approved or no longer exists.'), { status: 401 });
-    }
+    const token = authService.normalizeToken(
+      req.headers.authorization || req.headers['x-access-token'] || req.cookies?.token || ''
+    );
+    const user = await authService.getUserFromToken(token);
 
     req.user = user;
     next();
@@ -26,7 +18,7 @@ const requireAuth = async (req, res, next) => {
 
 const requireAdmin = (req, res, next) => {
   if (req.user?.role !== 'admin') {
-    next(Object.assign(new Error('Admin approval is required for this action.'), { status: 403 }));
+    next(Object.assign(new Error('Admin access is required for this action.'), { status: 403 }));
     return;
   }
 

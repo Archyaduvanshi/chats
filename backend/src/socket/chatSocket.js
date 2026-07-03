@@ -6,29 +6,44 @@ const env = require('../config/env');
 
 const connectedUsers = new Map();
 
-const getOnlineUsers = () => {
+const getOnlineUsernames = () => {
   const users = new Set(connectedUsers.values());
   return Array.from(users).sort((a, b) => a.localeCompare(b));
 };
 
 const getUserRoom = (username) => `user:${username}`;
 
+const emitVisibleOnlineUsers = async (io) => {
+  const onlineUsernames = new Set(getOnlineUsernames());
+  await Promise.all(
+    Array.from(io.sockets.sockets.values()).map(async (clientSocket) => {
+      if (!clientSocket.user?.username) return;
+
+      try {
+        const rooms = await roomService.listRoomsForUser(clientSocket.user);
+        const visibleUsers = new Set([clientSocket.user.username]);
+        rooms.forEach((room) => {
+          room.members?.forEach((member) => visibleUsers.add(member));
+        });
+
+        const visibleOnlineUsers = Array.from(visibleUsers)
+          .filter((username) => onlineUsernames.has(username))
+          .sort((a, b) => a.localeCompare(b));
+        clientSocket.emit('users:online', visibleOnlineUsers);
+      } catch {
+        clientSocket.emit('users:online', [clientSocket.user.username]);
+      }
+    })
+  );
+};
+
 const registerChatSocket = (io) => {
   io.use(async (socket, next) => {
     try {
-      const token = socket.handshake.auth?.token;
-      if (!token) {
-        next(new Error('Login is required.'));
-        return;
-      }
-
-      const payload = jwt.verify(token, env.jwtSecret);
-      const user = await authService.findApprovedUserById(payload.id);
-      if (!user) {
-        next(new Error('User is not approved.'));
-        return;
-      }
-
+      const token = authService.normalizeToken(
+        socket.handshake.auth?.token || socket.handshake.headers?.authorization || ''
+      );
+      const user = await authService.getUserFromToken(token);
       socket.user = user;
       next();
     } catch {
@@ -37,8 +52,6 @@ const registerChatSocket = (io) => {
   });
 
   io.on('connection', (socket) => {
-    socket.emit('users:online', getOnlineUsers());
-
     socket.on('user:join', async ({ roomId } = {}) => {
       const cleanUsername = socket.user.username;
 
@@ -52,7 +65,7 @@ const registerChatSocket = (io) => {
           socket.emit('socket:error', 'You do not have access to this room.');
         }
       }
-      io.emit('users:online', getOnlineUsers());
+      await emitVisibleOnlineUsers(io);
     });
 
     socket.on('message:send', async (payload, ack) => {
@@ -134,7 +147,7 @@ const registerChatSocket = (io) => {
 
     socket.on('disconnect', () => {
       connectedUsers.delete(socket.id);
-      io.emit('users:online', getOnlineUsers());
+      emitVisibleOnlineUsers(io);
     });
   });
 };

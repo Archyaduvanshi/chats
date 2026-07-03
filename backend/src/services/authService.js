@@ -10,6 +10,11 @@ const usingMongo = () => mongoose.connection.readyState === 1;
 const sanitizeUsername = (username) => String(username || '').trim().slice(0, 32);
 const normalizePhone = (phone) => String(phone || '').replace(/[^\d+]/g, '').slice(0, 20);
 const isValidPhone = (phone) => /^\+?\d{7,15}$/.test(phone);
+const normalizeToken = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  return raw.startsWith('Bearer ') ? raw.slice(7) : raw;
+};
 
 const toClientUser = (user, includeSensitive = false) => {
   const raw = user.toObject ? user.toObject() : user;
@@ -157,14 +162,37 @@ const findUserByLookup = async (lookup) => {
 };
 
 const findUserById = async (id) => {
+  const cleanId = String(id || '').trim();
+  if (!cleanId) return null;
+
   if (usingMongo()) {
-    const user = await User.findById(id);
+    const user = await User.findById(cleanId);
     return user ? toClientUser(user, true) : null;
   }
 
   const store = await readStore();
-  const user = store.users.find((candidate) => String(candidate.id) === String(id));
+  const user = store.users.find((candidate) => String(candidate.id) === cleanId);
   return user ? toClientUser(user, true) : null;
+};
+
+const getUserFromToken = async (token) => {
+  const cleanToken = normalizeToken(token);
+  if (!cleanToken) {
+    throw Object.assign(new Error('Login is required.'), { status: 401 });
+  }
+
+  const payload = jwt.verify(cleanToken, env.jwtSecret);
+  const userId = payload.id || payload.userId || payload._id;
+  if (!userId) {
+    throw Object.assign(new Error('Invalid session.'), { status: 401 });
+  }
+
+  const user = await findUserById(userId);
+  if (!user) {
+    throw Object.assign(new Error('User no longer exists.'), { status: 401 });
+  }
+
+  return user;
 };
 
 const listUsers = async () => {
@@ -180,8 +208,10 @@ const listUsers = async () => {
 module.exports = {
   findUserById,
   findUserByLookup,
+  getUserFromToken,
   listUsers,
   login,
+  normalizeToken,
   signup,
   toClientUser,
 };
