@@ -123,11 +123,9 @@ const UserList = ({
           </button>
           <SlidePanel isOpen={activePanel === 'phone'}>
             <div className="grid gap-2 border-x border-b border-[#dce4ef] px-3 py-3">
-              {directRooms.filter((room) => room.peerPhone).length > 0 && (
+              {directRooms.length > 0 && (
                 <div className="grid gap-1.5">
-                  {directRooms
-                    .filter((room) => room.peerPhone)
-                    .map((room) => (
+                  {directRooms.map((room) => (
                       <button
                         className={`flex min-h-10 items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold ${
                           activeRoomId === room.id ? 'bg-[#e7f3f7] text-[#144b5d]' : 'bg-[#eef3f8] text-[#344154]'
@@ -137,7 +135,7 @@ const UserList = ({
                         onClick={() => setActiveRoomId(room.id)}
                       >
                         <DirectPresence isOnline={onlineUserSet.has(room.peerUsername)} />
-                        <span className="min-w-0 truncate">{room.peerPhone}</span>
+                        <span className="min-w-0 truncate">{room.peerUsername || room.name}</span>
                         <span className="ml-auto">
                           <UnreadBadge count={room.unreadCount} />
                         </span>

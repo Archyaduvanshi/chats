@@ -11,15 +11,20 @@ const sanitizeUsername = (username) => String(username || '').trim().slice(0, 32
 const normalizePhone = (phone) => String(phone || '').replace(/[^\d+]/g, '').slice(0, 20);
 const isValidPhone = (phone) => /^\+?\d{7,15}$/.test(phone);
 
-const toClientUser = (user) => {
+const toClientUser = (user, includeSensitive = false) => {
   const raw = user.toObject ? user.toObject() : user;
-  return {
+  const clientUser = {
     id: String(raw._id || raw.id),
     username: raw.username,
-    phone: raw.phone || '',
-    role: raw.role,
-    status: raw.status,
   };
+
+  if (includeSensitive) {
+    clientUser.phone = raw.phone || '';
+    clientUser.role = raw.role;
+    clientUser.status = raw.status;
+  }
+
+  return clientUser;
 };
 
 const signToken = (user) =>
@@ -27,10 +32,13 @@ const signToken = (user) =>
     expiresIn: '7d',
   });
 
-const createSession = (user) => ({
-  user: toClientUser(user),
-  token: signToken(toClientUser(user)),
-});
+const createSession = (user) => {
+  const clientUser = toClientUser(user, true);
+  return {
+    user: clientUser,
+    token: signToken(user),
+  };
+};
 
 const signup = async ({ username, phone, password }) => {
   const cleanUsername = sanitizeUsername(username);
@@ -66,12 +74,10 @@ const signup = async ({ username, phone, password }) => {
       phone: cleanPhone,
       passwordHash,
       role: isFirstUser ? 'admin' : 'member',
-      status: isFirstUser ? 'approved' : 'pending',
+      status: 'approved',
     });
 
-    return user.status === 'approved'
-      ? createSession(user)
-      : { user: toClientUser(user), token: '' };
+    return createSession(user);
   }
 
   const store = await readStore();
@@ -92,14 +98,14 @@ const signup = async ({ username, phone, password }) => {
     phone: cleanPhone,
     passwordHash,
     role: isFirstUser ? 'admin' : 'member',
-    status: isFirstUser ? 'approved' : 'pending',
+    status: 'approved',
     createdAt: now,
     updatedAt: now,
   };
   store.users.push(user);
   await writeStore(store);
 
-  return user.status === 'approved' ? createSession(user) : { user: toClientUser(user), token: '' };
+  return createSession(user);
 };
 
 const login = async ({ username, password }) => {
@@ -123,22 +129,42 @@ const login = async ({ username, password }) => {
   if (!user || !(await bcrypt.compare(cleanPassword, user.passwordHash))) {
     throw Object.assign(new Error('Invalid username or password.'), { status: 401 });
   }
-  if (user.status !== 'approved') {
-    throw Object.assign(new Error('Waiting for admin approval.'), { status: 403 });
-  }
 
   return createSession(user);
 };
 
-const findApprovedUserById = async (id) => {
+const findUserByLookup = async (lookup) => {
+  const cleanLookup = sanitizeUsername(lookup);
+  const cleanPhone = normalizePhone(lookup);
+
+  if (usingMongo()) {
+    const user = await User.findOne({
+      $or: [
+        { username: new RegExp(`^${cleanLookup.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+        { phone: cleanPhone },
+      ],
+    });
+    return user || null;
+  }
+
+  const store = await readStore();
+  return (
+    store.users.find(
+      (candidate) =>
+        candidate.username?.toLowerCase() === cleanLookup.toLowerCase() || candidate.phone === cleanPhone
+    ) || null
+  );
+};
+
+const findUserById = async (id) => {
   if (usingMongo()) {
     const user = await User.findById(id);
-    return user?.status === 'approved' ? toClientUser(user) : null;
+    return user ? toClientUser(user, true) : null;
   }
 
   const store = await readStore();
   const user = store.users.find((candidate) => String(candidate.id) === String(id));
-  return user?.status === 'approved' ? toClientUser(user) : null;
+  return user ? toClientUser(user, true) : null;
 };
 
 const listUsers = async () => {
@@ -151,33 +177,9 @@ const listUsers = async () => {
   return store.users.map(toClientUser);
 };
 
-const approveUser = async (id) => {
-  if (usingMongo()) {
-    const user = await User.findByIdAndUpdate(
-      id,
-      { status: 'approved' },
-      { new: true }
-    );
-    if (!user) {
-      throw Object.assign(new Error('User not found.'), { status: 404 });
-    }
-    return toClientUser(user);
-  }
-
-  const store = await readStore();
-  const user = store.users.find((candidate) => String(candidate.id) === String(id));
-  if (!user) {
-    throw Object.assign(new Error('User not found.'), { status: 404 });
-  }
-  user.status = 'approved';
-  user.updatedAt = new Date().toISOString();
-  await writeStore(store);
-  return toClientUser(user);
-};
-
 module.exports = {
-  approveUser,
-  findApprovedUserById,
+  findUserById,
+  findUserByLookup,
   listUsers,
   login,
   signup,

@@ -299,16 +299,10 @@ const joinRoom = async ({ roomId, roomCode, password, inviteCode }, user) => {
 
 const createDirectRoom = async ({ username }, user) => {
   const lookup = String(username || '').trim();
-  const lookupPhone = normalizePhone(lookup);
-  const users = await authService.listUsers();
-  const otherUser = users.find(
-    (candidate) =>
-      candidate.status === 'approved' &&
-      (candidate.username?.toLowerCase() === lookup.toLowerCase() || candidate.phone === lookupPhone)
-  );
+  const otherUser = await authService.findUserByLookup(lookup);
 
   if (!otherUser || otherUser.username === user.username) {
-    throw Object.assign(new Error('Choose another approved user for private chat.'), {
+    throw Object.assign(new Error('Choose another user for private chat.'), {
       status: 400,
     });
   }
