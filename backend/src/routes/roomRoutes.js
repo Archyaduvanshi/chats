@@ -1,19 +1,14 @@
 const express = require('express');
-const {
-  createDirectRoom,
-  createRoom,
-  joinRoom,
-  listRooms,
-} = require('../controllers/roomController');
+const roomController = require('../controllers/roomController');
 const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
 router.use(requireAuth);
 
-router.get('/', listRooms);
-router.post('/', createRoom);
-router.post('/join', joinRoom);
-router.post('/direct', createDirectRoom);
+router.get('/', roomController.listRooms);
+router.post('/', roomController.createRoom);
+router.post('/join', roomController.joinRoom);
+router.post('/direct', roomController.createDirectRoom);
 
 module.exports = router;
