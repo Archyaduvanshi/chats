@@ -8,6 +8,11 @@ const messageSchema = new mongoose.Schema(
       trim: true,
       maxlength: 32,
     },
+    roomId: {
+      type: String,
+      required: true,
+      index: true,
+    },
     cipherText: {
       type: String,
       required: true,

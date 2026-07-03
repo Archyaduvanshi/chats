@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react';
 import MessageBubble from './MessageBubble';
 
 const MessageList = ({
+  isDirectChat,
+  isPeerOnline,
   messages,
   username,
   typingUsers,
@@ -29,7 +31,9 @@ const MessageList = ({
           <MessageBubble
             key={message.id}
             message={message}
+            isDirectChat={isDirectChat}
             isOwn={message.username === username}
+            isPeerOnline={isPeerOnline}
             onCopy={onCopyMessage}
             onDelete={onDeleteMessage}
             onEdit={onEditMessage}

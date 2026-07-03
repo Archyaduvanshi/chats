@@ -2,27 +2,29 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createChatSocket } from '../services/socket';
 
 export const useChatSocket = ({
+  token,
   username,
+  roomId,
   onMessage,
   onMessageDelete,
   onMessageUpdate,
   onReadUpdate,
 }) => {
-  const socket = useMemo(() => createChatSocket(), []);
+  const socket = useMemo(() => createChatSocket(token), [token]);
   const [isConnected, setIsConnected] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [typingUsers, setTypingUsers] = useState([]);
   const typingTimeoutRef = useRef(null);
 
   useEffect(() => {
-    if (!username) return undefined;
+    if (!token || !username || !roomId) return undefined;
 
     socket.connect();
 
     const handleConnect = () => {
       setIsConnected(true);
-      socket.emit('user:join', username);
-      socket.emit('messages:read', username);
+      socket.emit('user:join', { roomId });
+      socket.emit('messages:read', { roomId });
     };
     const handleDisconnect = () => setIsConnected(false);
     const handleTypingStart = (typingUsername) => {
@@ -43,7 +45,9 @@ export const useChatSocket = ({
     socket.on('users:online', setOnlineUsers);
     socket.on('typing:start', handleTypingStart);
     socket.on('typing:stop', handleTypingStop);
-    socket.on('messages:read', ({ messages }) => onReadUpdate(messages));
+    socket.on('messages:read', ({ roomId: updatedRoomId, messages }) => {
+      if (updatedRoomId === roomId) onReadUpdate(messages);
+    });
 
     if (socket.connected) handleConnect();
 
@@ -59,7 +63,7 @@ export const useChatSocket = ({
       socket.off('messages:read');
       socket.disconnect();
     };
-  }, [onMessage, onMessageDelete, onMessageUpdate, onReadUpdate, socket, username]);
+  }, [onMessage, onMessageDelete, onMessageUpdate, onReadUpdate, roomId, socket, token, username]);
 
   const sendSocketMessage = (payload) =>
     new Promise((resolve, reject) => {
@@ -96,17 +100,17 @@ export const useChatSocket = ({
 
   const startTyping = () => {
     if (!username || !socket.connected) return;
-    socket.emit('typing:start', username);
+    socket.emit('typing:start', { roomId });
     clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
-      socket.emit('typing:stop', username);
+      socket.emit('typing:stop', { roomId });
     }, 900);
   };
 
   const stopTyping = () => {
     if (!username || !socket.connected) return;
     clearTimeout(typingTimeoutRef.current);
-    socket.emit('typing:stop', username);
+    socket.emit('typing:stop', { roomId });
   };
 
   return {

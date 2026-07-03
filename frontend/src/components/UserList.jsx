@@ -1,25 +1,390 @@
-const UserList = ({ onlineUsers }) => (
-  <aside
-    className="min-h-0 rounded-lg border border-[#dce4ef] bg-white p-3.5 lg:p-[18px]"
-    aria-label="Online users"
+import { Check, ChevronDown, Hash, Lock, Phone, UserCheck, X } from 'lucide-react';
+import { useMemo, useState } from 'react';
+
+const optionClass = (isActive) =>
+  `flex min-h-11 w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left font-extrabold transition ${
+    isActive
+      ? 'border-[#1d6c8a] bg-[#e7f3f7] text-[#144b5d]'
+      : 'border-[#dce4ef] bg-white text-[#344154] hover:bg-[#f8fafc]'
+  }`;
+
+const SlidePanel = ({ children, isOpen }) => (
+  <div
+    className={`grid overflow-hidden transition-[grid-template-rows,opacity] duration-300 ease-out ${
+      isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+    }`}
   >
-    <h2 className="m-0 mb-3.5 text-base font-bold">Online</h2>
-    <div className="flex gap-2.5 overflow-x-auto pb-0.5 lg:grid lg:overflow-visible lg:pb-0">
-      {onlineUsers.length === 0 ? (
-        <p className="text-[#687384]">No users online yet.</p>
-      ) : (
-        onlineUsers.map((user) => (
-          <div
-            className="flex min-w-0 flex-none items-center gap-2.5 font-bold lg:flex-auto"
-            key={user}
-          >
-            <span className="h-[9px] w-[9px] flex-none rounded-full bg-[#22a66c]" aria-hidden="true" />
-            {user}
-          </div>
-        ))
-      )}
-    </div>
-  </aside>
+    <div className="min-h-0">{children}</div>
+  </div>
 );
+
+const DirectPresence = ({ isOnline }) => (
+  <span
+    className={`inline-grid h-[18px] w-[18px] flex-none place-items-center rounded-full ${
+      isOnline ? 'bg-[#22a66c] text-white' : 'bg-[#c43d32]'
+    }`}
+    title={isOnline ? 'Online' : 'Offline'}
+    aria-label={isOnline ? 'Online' : 'Offline'}
+  >
+    {isOnline && <Check size={12} strokeWidth={3} />}
+  </span>
+);
+
+const UserList = ({
+  activeRoomId,
+  activePanel,
+  currentUser,
+  directPhone,
+  directUsername,
+  joinInviteCode,
+  joinPassword,
+  joinRoomCode,
+  newRoomMaxMembers,
+  newRoomName,
+  newRoomPassword,
+  onlineUsers,
+  rooms,
+  users,
+  setActiveRoomId,
+  setActivePanel,
+  setDirectPhone,
+  setDirectUsername,
+  setJoinInviteCode,
+  setJoinPassword,
+  setJoinRoomCode,
+  setNewRoomMaxMembers,
+  setNewRoomName,
+  setNewRoomPassword,
+  onApproveUser,
+  onCreateDirectByPhone,
+  onCreateDirectByUsername,
+  onCreateRoom,
+  onJoinRoom,
+}) => {
+  const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
+  const [roomAction, setRoomAction] = useState('');
+  const [createdRoom, setCreatedRoom] = useState(null);
+  const [createdRoomPassword, setCreatedRoomPassword] = useState('');
+
+  const directRooms = useMemo(
+    () => rooms.filter((room) => room.type === 'direct'),
+    [rooms]
+  );
+  const groupRooms = useMemo(
+    () => rooms.filter((room) => room.type !== 'direct'),
+    [rooms]
+  );
+  const pendingUsers = users.filter((user) => user.status === 'pending');
+  const onlineUserSet = useMemo(() => new Set(onlineUsers), [onlineUsers]);
+
+  const togglePanel = (panel) => {
+    setActivePanel(panel);
+    if (panel === 'rooms') {
+      setIsRoomModalOpen(true);
+    }
+  };
+
+  const handleCreateRoom = async () => {
+    const passwordForSummary = newRoomPassword;
+    const room = await onCreateRoom();
+    if (!room) return;
+    setCreatedRoom(room);
+    setCreatedRoomPassword(passwordForSummary);
+    setRoomAction('');
+  };
+
+  const handleJoinRoom = async () => {
+    const room = await onJoinRoom();
+    if (!room) return;
+    setIsRoomModalOpen(false);
+    setRoomAction('');
+  };
+
+  return (
+    <>
+      <aside
+        className="min-h-0 overflow-y-auto rounded-lg border border-[#dce4ef] bg-white p-3.5 lg:p-[18px]"
+        aria-label="Chat access"
+      >
+        <div className="grid gap-2">
+          <button className={optionClass(activePanel === 'phone')} type="button" onClick={() => togglePanel('phone')}>
+            <span className="flex items-center gap-2">
+              <Phone size={17} />
+              Chat by phone
+            </span>
+            <ChevronDown size={17} className={activePanel === 'phone' ? 'rotate-180 transition' : 'transition'} />
+          </button>
+          <SlidePanel isOpen={activePanel === 'phone'}>
+            <div className="grid gap-2 border-x border-b border-[#dce4ef] px-3 py-3">
+              {directRooms.filter((room) => room.peerPhone).length > 0 && (
+                <div className="grid gap-1.5">
+                  {directRooms
+                    .filter((room) => room.peerPhone)
+                    .map((room) => (
+                      <button
+                        className={`flex min-h-10 items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold ${
+                          activeRoomId === room.id ? 'bg-[#e7f3f7] text-[#144b5d]' : 'bg-[#eef3f8] text-[#344154]'
+                        }`}
+                        key={room.id}
+                        type="button"
+                        onClick={() => setActiveRoomId(room.id)}
+                      >
+                        <DirectPresence isOnline={onlineUserSet.has(room.peerUsername)} />
+                        <span className="min-w-0 truncate">{room.peerPhone}</span>
+                      </button>
+                    ))}
+                </div>
+              )}
+              <input
+                className="min-h-10 rounded-lg border border-[#ccd7e5] px-3 outline-none focus:border-[#1d6c8a]"
+                value={directPhone}
+                onChange={(event) => setDirectPhone(event.target.value)}
+                placeholder="Add new phone number"
+              />
+              <button
+                className="rounded-lg bg-[#cd5f44] px-3 py-2 font-extrabold text-white disabled:opacity-50"
+                type="button"
+                disabled={!directPhone.trim()}
+                onClick={onCreateDirectByPhone}
+              >
+                Start phone chat
+              </button>
+            </div>
+          </SlidePanel>
+
+          <button className={optionClass(activePanel === 'username')} type="button" onClick={() => togglePanel('username')}>
+            <span className="flex items-center gap-2">
+              <UserCheck size={17} />
+              Chat by username
+            </span>
+            <ChevronDown size={17} className={activePanel === 'username' ? 'rotate-180 transition' : 'transition'} />
+          </button>
+          <SlidePanel isOpen={activePanel === 'username'}>
+            <div className="grid gap-2 border-x border-b border-[#dce4ef] px-3 py-3">
+              {directRooms.length > 0 && (
+                <div className="grid gap-1.5">
+                  {directRooms.map((room) => (
+                    <button
+                      className={`flex min-h-10 items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold ${
+                        activeRoomId === room.id ? 'bg-[#e7f3f7] text-[#144b5d]' : 'bg-[#eef3f8] text-[#344154]'
+                      }`}
+                      key={room.id}
+                      type="button"
+                      onClick={() => setActiveRoomId(room.id)}
+                    >
+                      <DirectPresence isOnline={onlineUserSet.has(room.peerUsername)} />
+                      <span className="min-w-0 truncate">{room.peerUsername || room.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <input
+                className="min-h-10 rounded-lg border border-[#ccd7e5] px-3 outline-none focus:border-[#1d6c8a]"
+                value={directUsername}
+                onChange={(event) => setDirectUsername(event.target.value)}
+                placeholder="Add new username"
+              />
+              <button
+                className="rounded-lg bg-[#cd5f44] px-3 py-2 font-extrabold text-white disabled:opacity-50"
+                type="button"
+                disabled={!directUsername.trim()}
+                onClick={onCreateDirectByUsername}
+              >
+                Start username chat
+              </button>
+            </div>
+          </SlidePanel>
+
+          <button className={optionClass(activePanel === 'rooms')} type="button" onClick={() => togglePanel('rooms')}>
+            <span className="flex items-center gap-2">
+              <Hash size={17} />
+              Room chat
+            </span>
+            <ChevronDown size={17} className={activePanel === 'rooms' ? 'rotate-180 transition' : 'transition'} />
+          </button>
+          <SlidePanel isOpen={activePanel === 'rooms'}>
+            <div className="grid gap-2 border-x border-b border-[#dce4ef] px-3 py-3">
+              {groupRooms.map((room) => (
+                <button
+                  className={`flex min-h-10 items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-bold ${
+                    activeRoomId === room.id ? 'bg-[#e7f3f7] text-[#144b5d]' : 'bg-[#eef3f8] text-[#344154]'
+                  }`}
+                  key={room.id}
+                  type="button"
+                  onClick={() => setActiveRoomId(room.id)}
+                >
+                  <span className="min-w-0 truncate">{room.name}</span>
+                  <span className="flex items-center gap-1.5 text-xs text-[#687384]">
+                    {room.roomCode}
+                    {room.hasPassword && <Lock size={14} />}
+                  </span>
+                </button>
+              ))}
+              <button
+                className="rounded-lg bg-[#1d6c8a] px-3 py-2 font-extrabold text-white"
+                type="button"
+                onClick={() => {
+                  setIsRoomModalOpen(true);
+                  setRoomAction('');
+                }}
+              >
+                Open room options
+              </button>
+            </div>
+          </SlidePanel>
+
+          {currentUser?.role === 'admin' && (
+            <div className="rounded-lg border border-[#dce4ef] bg-white px-3 py-3">
+              <h2 className="m-0 mb-2 flex items-center gap-2 text-sm font-bold text-[#344154]">
+                <Check size={16} />
+                Approvals
+              </h2>
+              <div className="grid gap-2">
+                {pendingUsers.length === 0 ? (
+                  <p className="m-0 text-sm text-[#687384]">No pending users.</p>
+                ) : (
+                  pendingUsers.map((user) => (
+                    <button
+                      className="rounded-lg border border-[#dce4ef] px-3 py-2 text-left text-sm font-bold text-[#344154]"
+                      type="button"
+                      key={user.id}
+                      onClick={() => onApproveUser(user.id)}
+                    >
+                      Approve {user.username} {user.phone ? `(${user.phone})` : ''}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </aside>
+
+      {isRoomModalOpen && (
+        <div className="fixed inset-0 z-30 grid place-items-center bg-[#18202f]/35 p-4 backdrop-blur-sm">
+          <section className="max-h-[88vh] w-full max-w-[520px] overflow-y-auto rounded-lg border border-[#dce4ef] bg-white p-4 shadow-[0_24px_70px_rgba(25,32,46,0.2)] sm:p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h2 className="m-0 text-lg font-bold">Room chat</h2>
+              <button
+                className="inline-grid h-9 w-9 place-items-center rounded-lg bg-[#eef3f8] text-[#344154]"
+                type="button"
+                onClick={() => setIsRoomModalOpen(false)}
+                aria-label="Close room options"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                className={`rounded-lg px-3 py-2.5 font-extrabold ${
+                  roomAction === 'create' ? 'bg-[#1d6c8a] text-white' : 'bg-[#eef3f8] text-[#344154]'
+                }`}
+                type="button"
+                onClick={() => {
+                  setRoomAction(roomAction === 'create' ? '' : 'create');
+                  setCreatedRoom(null);
+                }}
+              >
+                Create room
+              </button>
+              <button
+                className={`rounded-lg px-3 py-2.5 font-extrabold ${
+                  roomAction === 'join' ? 'bg-[#18202f] text-white' : 'bg-[#eef3f8] text-[#344154]'
+                }`}
+                type="button"
+                onClick={() => {
+                  setRoomAction(roomAction === 'join' ? '' : 'join');
+                  setCreatedRoom(null);
+                }}
+              >
+                Join room
+              </button>
+            </div>
+
+            <SlidePanel isOpen={roomAction === 'create'}>
+              <div className="mt-4 grid gap-2">
+                <input
+                  className="min-h-11 rounded-lg border border-[#ccd7e5] px-3 outline-none focus:border-[#1d6c8a]"
+                  value={newRoomName}
+                  onChange={(event) => setNewRoomName(event.target.value)}
+                  placeholder="Room name"
+                />
+                <input
+                  className="min-h-11 rounded-lg border border-[#ccd7e5] px-3 outline-none focus:border-[#1d6c8a]"
+                  value={newRoomPassword}
+                  onChange={(event) => setNewRoomPassword(event.target.value)}
+                  placeholder="Optional room password"
+                  type="password"
+                />
+                <input
+                  className="min-h-11 rounded-lg border border-[#ccd7e5] px-3 outline-none focus:border-[#1d6c8a]"
+                  value={newRoomMaxMembers}
+                  onChange={(event) => setNewRoomMaxMembers(event.target.value)}
+                  min={2}
+                  max={500}
+                  placeholder="Number of members"
+                  type="number"
+                />
+                <button
+                  className="rounded-lg bg-[#1d6c8a] px-3 py-3 font-extrabold text-white disabled:opacity-50"
+                  type="button"
+                  disabled={!newRoomName.trim()}
+                  onClick={handleCreateRoom}
+                >
+                  Create room
+                </button>
+              </div>
+            </SlidePanel>
+
+            <SlidePanel isOpen={roomAction === 'join'}>
+              <div className="mt-4 grid gap-2">
+                <input
+                  className="min-h-11 rounded-lg border border-[#ccd7e5] px-3 uppercase outline-none focus:border-[#1d6c8a]"
+                  value={joinRoomCode}
+                  onChange={(event) => setJoinRoomCode(event.target.value.toUpperCase())}
+                  placeholder="Room unique key"
+                />
+                <input
+                  className="min-h-11 rounded-lg border border-[#ccd7e5] px-3 outline-none focus:border-[#1d6c8a]"
+                  value={joinPassword}
+                  onChange={(event) => setJoinPassword(event.target.value)}
+                  placeholder="Password if room has one"
+                  type="password"
+                />
+                <input
+                  className="min-h-11 rounded-lg border border-[#ccd7e5] px-3 outline-none focus:border-[#1d6c8a]"
+                  value={joinInviteCode}
+                  onChange={(event) => setJoinInviteCode(event.target.value)}
+                  placeholder="Invite code if shared"
+                />
+                <button
+                  className="rounded-lg bg-[#18202f] px-3 py-3 font-extrabold text-white disabled:opacity-50"
+                  type="button"
+                  disabled={!joinRoomCode.trim() && !joinInviteCode.trim()}
+                  onClick={handleJoinRoom}
+                >
+                  Join room
+                </button>
+              </div>
+            </SlidePanel>
+
+            {createdRoom && (
+              <div className="mt-4 rounded-lg border border-[#dce4ef] bg-[#f8fafc] p-3">
+                <h3 className="m-0 mb-2 text-base font-bold">Room created</h3>
+                <div className="grid gap-1.5 text-sm text-[#344154]">
+                  <span>Name: {createdRoom.name}</span>
+                  <span>Password: {createdRoomPassword || 'No password'}</span>
+                  <span>Unique key: {createdRoom.roomCode}</span>
+                  <span>Members: {createdRoom.memberCount}/{createdRoom.maxMembers}</span>
+                </div>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+    </>
+  );
+};
 
 export default UserList;

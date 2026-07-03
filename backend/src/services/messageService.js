@@ -16,8 +16,31 @@ const ensureDataFile = async () => {
 
 const usingMongo = () => mongoose.connection.readyState === 1;
 
-const sanitizeMessage = ({ username, text }) => {
-  const cleanUsername = String(username || '').trim().slice(0, 32);
+const sanitizeMessage = ({ username, roomId, text }) => {
+  const cleanUsername = sanitizeUsername(username);
+  const cleanRoomId = String(roomId || '').trim();
+  const cleanText = String(text || '').trim();
+
+  if (!cleanUsername) {
+    throw Object.assign(new Error('Username is required.'), { status: 400 });
+  }
+  if (!cleanRoomId) {
+    throw Object.assign(new Error('Room is required.'), { status: 400 });
+  }
+
+  if (!cleanText) {
+    throw Object.assign(new Error('Message text is required.'), { status: 400 });
+  }
+
+  if (cleanText.length > 1000) {
+    throw Object.assign(new Error('Message cannot exceed 1000 characters.'), { status: 400 });
+  }
+
+  return { username: cleanUsername, roomId: cleanRoomId, text: cleanText };
+};
+
+const sanitizeMessageEdit = ({ username, text }) => {
+  const cleanUsername = sanitizeUsername(username);
   const cleanText = String(text || '').trim();
 
   if (!cleanUsername) {
@@ -46,6 +69,7 @@ const toClientMessage = (message) => {
   return {
     id: String(raw._id || raw.id),
     username: raw.username,
+    roomId: raw.roomId || 'lobby',
     text: decryptText(raw),
     delivered: Boolean(raw.delivered),
     readBy: raw.readBy || [],
@@ -67,12 +91,13 @@ const writeFileMessages = async (messages) => {
 };
 
 const createMessage = async (payload) => {
-  const { username, text } = sanitizeMessage(payload);
+  const { username, roomId, text } = sanitizeMessage(payload);
   const encrypted = encryptText(text);
 
   if (usingMongo()) {
     const message = await Message.create({
       username,
+      roomId,
       ...encrypted,
       delivered: true,
       readBy: [username],
@@ -84,6 +109,7 @@ const createMessage = async (payload) => {
   const storedMessage = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
     username,
+    roomId,
     ...encrypted,
     delivered: true,
     readBy: [username],
@@ -96,40 +122,54 @@ const createMessage = async (payload) => {
   return toClientMessage(storedMessage);
 };
 
-const getMessages = async () => {
+const getMessages = async (roomId) => {
+  const cleanRoomId = String(roomId || '').trim();
+  if (!cleanRoomId) {
+    throw Object.assign(new Error('Room is required.'), { status: 400 });
+  }
+
   if (usingMongo()) {
-    const messages = await Message.find({}).sort({ createdAt: 1 }).limit(100);
+    const messages = await Message.find({ roomId: cleanRoomId }).sort({ createdAt: 1 }).limit(100);
     return messages.map(toClientMessage);
   }
 
   const messages = await readFileMessages();
-  return messages.slice(-100).map(toClientMessage);
+  return messages
+    .filter((message) => (message.roomId || 'lobby') === cleanRoomId)
+    .slice(-100)
+    .map(toClientMessage);
 };
 
-const markMessagesRead = async (username) => {
+const markMessagesRead = async (username, roomId) => {
   const cleanUsername = sanitizeUsername(username);
+  const cleanRoomId = String(roomId || '').trim();
   if (!cleanUsername) return [];
+  if (!cleanRoomId) return [];
 
   if (usingMongo()) {
     await Message.updateMany(
-      { readBy: { $ne: cleanUsername } },
+      { roomId: cleanRoomId, readBy: { $ne: cleanUsername } },
       { $addToSet: { readBy: cleanUsername } }
     );
-    return getMessages();
+    return getMessages(cleanRoomId);
   }
 
   const messages = await readFileMessages();
   const updatedMessages = messages.map((message) => {
+    if ((message.roomId || 'lobby') !== cleanRoomId) return message;
     const readBy = message.readBy || [];
     if (readBy.includes(cleanUsername)) return message;
     return { ...message, readBy: [...readBy, cleanUsername], updatedAt: new Date().toISOString() };
   });
   await writeFileMessages(updatedMessages);
-  return updatedMessages.slice(-100).map(toClientMessage);
+  return updatedMessages
+    .filter((message) => (message.roomId || 'lobby') === cleanRoomId)
+    .slice(-100)
+    .map(toClientMessage);
 };
 
 const updateMessage = async (id, payload) => {
-  const { username, text } = sanitizeMessage(payload);
+  const { username, text } = sanitizeMessageEdit(payload);
 
   if (usingMongo()) {
     const message = await Message.findById(id);
@@ -192,8 +232,9 @@ const deleteMessage = async (id, username) => {
     if (message.username !== cleanUsername) {
       throw Object.assign(new Error('Only the sender can delete this message.'), { status: 403 });
     }
+    const roomId = message.roomId;
     await Message.deleteOne({ _id: id });
-    return { id: String(id) };
+    return { id: String(id), roomId };
   }
 
   const messages = await readFileMessages();
@@ -205,9 +246,10 @@ const deleteMessage = async (id, username) => {
     throw Object.assign(new Error('Only the sender can delete this message.'), { status: 403 });
   }
 
+  const roomId = messages[messageIndex].roomId || 'lobby';
   messages.splice(messageIndex, 1);
   await writeFileMessages(messages);
-  return { id: String(id) };
+  return { id: String(id), roomId };
 };
 
 module.exports = {

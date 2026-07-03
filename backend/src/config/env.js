@@ -12,7 +12,9 @@ const env = {
   mongoUri: process.env.MONGODB_URI || '',
   clientOrigins: [...new Set([...defaultClientOrigins, ...configuredClientOrigins])],
   messageSecret: process.env.MESSAGE_SECRET || 'dev-message-secret-change-me',
+  jwtSecret: process.env.JWT_SECRET || process.env.MESSAGE_SECRET || 'dev-jwt-secret-change-me',
   dataFile: process.env.DATA_FILE || path.resolve(__dirname, '../../data/messages.json'),
+  appDataFile: process.env.APP_DATA_FILE || path.resolve(__dirname, '../../data/app.json'),
 };
 
 module.exports = env;

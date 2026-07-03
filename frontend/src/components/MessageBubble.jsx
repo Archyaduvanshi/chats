@@ -4,7 +4,15 @@ import { formatMessageTime } from '../utils/date';
 
 const EDIT_LIMIT_MS = 60 * 1000;
 
-const MessageBubble = ({ message, isOwn, onCopy, onDelete, onEdit }) => {
+const MessageBubble = ({
+  message,
+  isDirectChat,
+  isOwn,
+  isPeerOnline,
+  onCopy,
+  onDelete,
+  onEdit,
+}) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(message.text);
@@ -89,6 +97,8 @@ const MessageBubble = ({ message, isOwn, onCopy, onDelete, onEdit }) => {
   const bubbleClassName = `relative min-w-[min(220px,88vw)] max-w-[88%] rounded-lg px-3.5 py-3 sm:max-w-[min(68%,680px)] ${
     isOwn ? 'bg-[#1d6c8a] text-white' : 'bg-[#eef3f8] text-[#18202f]'
   }`;
+  const isReadByPeer = message.readBy?.some((reader) => reader !== message.username);
+  const StatusIcon = isPeerOnline || isReadByPeer ? CheckCheck : Check;
 
   return (
     <article className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
@@ -193,10 +203,15 @@ const MessageBubble = ({ message, isOwn, onCopy, onDelete, onEdit }) => {
             )}
           </p>
         )}
-        {isOwn && (
-          <span className="mt-2 inline-flex w-full items-center justify-end gap-1.5 whitespace-nowrap rounded-full text-[0.76rem] opacity-80">
-            <CheckCheck size={14} />
-            {message.readBy?.length > 1 ? 'Read' : 'Delivered'}
+        {isOwn && isDirectChat && (
+          <span
+            className={`mt-2 inline-flex w-full items-center justify-end gap-1.5 whitespace-nowrap rounded-full text-[0.76rem] ${
+              isReadByPeer ? 'text-[#61d8ff]' : 'text-white/80'
+            }`}
+            aria-label={isReadByPeer ? 'Read' : isPeerOnline ? 'Delivered' : 'Sent'}
+            title={isReadByPeer ? 'Read' : isPeerOnline ? 'Delivered' : 'Sent'}
+          >
+            <StatusIcon size={15} strokeWidth={2.7} />
           </span>
         )}
       </div>
