@@ -6,5 +6,10 @@ export const createChatSocket = (token) =>
   io(SOCKET_URL, {
     transports: ['websocket', 'polling'],
     autoConnect: false,
+    withCredentials: true,
     auth: { token },
+    extraHeaders: {
+      Authorization: token ? `Bearer ${token}` : '',
+      'x-access-token': token || '',
+    },
   });

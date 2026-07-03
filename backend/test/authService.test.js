@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { toClientUser } = require('../src/services/authService');
+const jwt = require('jsonwebtoken');
+const { toClientUser, verifyToken } = require('../src/services/authService');
 
 test('toClientUser omits phone for non-sensitive responses', () => {
   const payload = toClientUser({
@@ -29,4 +30,13 @@ test('toClientUser includes phone for self-scoped responses', () => {
 
   assert.equal(payload.username, 'alice');
   assert.equal(payload.phone, '+1234567890');
+});
+
+test('verifyToken accepts legacy fallback secrets', () => {
+  process.env.JWT_SECRET = 'legacy-secret';
+  const token = jwt.sign({ id: 'user-1', username: 'alice', role: 'member' }, 'legacy-secret');
+  const payload = verifyToken(token);
+
+  assert.equal(payload.username, 'alice');
+  assert.equal(payload.id, 'user-1');
 });

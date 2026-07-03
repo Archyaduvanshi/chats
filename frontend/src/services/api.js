@@ -2,9 +2,10 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 const request = async (path, options = {}) => {
   const response = await fetch(`${API_URL}${path}`, {
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
+      ...(options.token ? { Authorization: `Bearer ${options.token}`, 'x-access-token': options.token } : {}),
       ...options.headers,
     },
     ...Object.fromEntries(Object.entries(options).filter(([key]) => key !== 'token')),
@@ -32,19 +33,6 @@ export const login = async ({ username, password }) =>
     method: 'POST',
     body: JSON.stringify({ username, password }),
   });
-
-export const fetchUsers = async (token) => {
-  const data = await request('/api/auth/users', { token });
-  return data.users || [];
-};
-
-export const approveUser = async ({ id, token }) => {
-  const data = await request(`/api/auth/users/${id}/approve`, {
-    method: 'PATCH',
-    token,
-  });
-  return data.user;
-};
 
 export const fetchRooms = async (token) => {
   const data = await request('/api/rooms', { token });

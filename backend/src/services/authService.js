@@ -32,8 +32,36 @@ const toClientUser = (user, includeSensitive = false) => {
   return clientUser;
 };
 
+const getJwtSecrets = () => {
+  const primary = process.env.JWT_SECRET || env.jwtSecret || '';
+  const fallback = process.env.MESSAGE_SECRET || '';
+  return [primary, fallback].filter(Boolean);
+};
+
+const getJwtSigningSecret = () => getJwtSecrets()[0] || env.jwtSecret || 'dev-jwt-secret-change-me';
+
+const verifyToken = (token) => {
+  const cleanToken = normalizeToken(token);
+  if (!cleanToken) {
+    throw Object.assign(new Error('Login is required.'), { status: 401 });
+  }
+
+  const secrets = getJwtSecrets();
+  const lastError = new Error('Invalid session.');
+
+  for (const secret of secrets) {
+    try {
+      return jwt.verify(cleanToken, secret);
+    } catch (error) {
+      lastError.message = error.message;
+    }
+  }
+
+  throw Object.assign(lastError, { status: 401 });
+};
+
 const signToken = (user) =>
-  jwt.sign({ id: user.id, username: user.username, role: user.role }, env.jwtSecret, {
+  jwt.sign({ id: user.id, username: user.username, role: user.role }, getJwtSigningSecret(), {
     expiresIn: '7d',
   });
 
@@ -181,7 +209,7 @@ const getUserFromToken = async (token) => {
     throw Object.assign(new Error('Login is required.'), { status: 401 });
   }
 
-  const payload = jwt.verify(cleanToken, env.jwtSecret);
+  const payload = verifyToken(cleanToken);
   const userId = payload.id || payload.userId || payload._id;
   if (!userId) {
     throw Object.assign(new Error('Invalid session.'), { status: 401 });
@@ -214,4 +242,5 @@ module.exports = {
   normalizeToken,
   signup,
   toClientUser,
+  verifyToken,
 };
