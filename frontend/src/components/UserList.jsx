@@ -30,10 +30,23 @@ const DirectPresence = ({ isOnline }) => (
   </span>
 );
 
+const UnreadBadge = ({ count }) => {
+  if (!count) return null;
+  const label = count > 99 ? '99+' : count;
+
+  return (
+    <span
+      className="inline-grid h-6 min-w-6 flex-none place-items-center rounded-full bg-[#22a66c] px-2 text-xs font-extrabold leading-none text-white"
+      aria-label={`${count} unread messages`}
+    >
+      {label}
+    </span>
+  );
+};
+
 const UserList = ({
   activeRoomId,
   activePanel,
-  currentUser,
   directPhone,
   directUsername,
   joinInviteCode,
@@ -44,7 +57,6 @@ const UserList = ({
   newRoomPassword,
   onlineUsers,
   rooms,
-  users,
   setActiveRoomId,
   setActivePanel,
   setDirectPhone,
@@ -55,7 +67,6 @@ const UserList = ({
   setNewRoomMaxMembers,
   setNewRoomName,
   setNewRoomPassword,
-  onApproveUser,
   onCreateDirectByPhone,
   onCreateDirectByUsername,
   onCreateRoom,
@@ -74,14 +85,10 @@ const UserList = ({
     () => rooms.filter((room) => room.type !== 'direct'),
     [rooms]
   );
-  const pendingUsers = users.filter((user) => user.status === 'pending');
   const onlineUserSet = useMemo(() => new Set(onlineUsers), [onlineUsers]);
 
   const togglePanel = (panel) => {
     setActivePanel(panel);
-    if (panel === 'rooms') {
-      setIsRoomModalOpen(true);
-    }
   };
 
   const handleCreateRoom = async () => {
@@ -131,6 +138,9 @@ const UserList = ({
                       >
                         <DirectPresence isOnline={onlineUserSet.has(room.peerUsername)} />
                         <span className="min-w-0 truncate">{room.peerPhone}</span>
+                        <span className="ml-auto">
+                          <UnreadBadge count={room.unreadCount} />
+                        </span>
                       </button>
                     ))}
                 </div>
@@ -174,6 +184,9 @@ const UserList = ({
                     >
                       <DirectPresence isOnline={onlineUserSet.has(room.peerUsername)} />
                       <span className="min-w-0 truncate">{room.peerUsername || room.name}</span>
+                      <span className="ml-auto">
+                        <UnreadBadge count={room.unreadCount} />
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -232,31 +245,6 @@ const UserList = ({
               </button>
             </div>
           </SlidePanel>
-
-          {currentUser?.role === 'admin' && (
-            <div className="rounded-lg border border-[#dce4ef] bg-white px-3 py-3">
-              <h2 className="m-0 mb-2 flex items-center gap-2 text-sm font-bold text-[#344154]">
-                <Check size={16} />
-                Approvals
-              </h2>
-              <div className="grid gap-2">
-                {pendingUsers.length === 0 ? (
-                  <p className="m-0 text-sm text-[#687384]">No pending users.</p>
-                ) : (
-                  pendingUsers.map((user) => (
-                    <button
-                      className="rounded-lg border border-[#dce4ef] px-3 py-2 text-left text-sm font-bold text-[#344154]"
-                      type="button"
-                      key={user.id}
-                      onClick={() => onApproveUser(user.id)}
-                    >
-                      Approve {user.username} {user.phone ? `(${user.phone})` : ''}
-                    </button>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
         </div>
       </aside>
 

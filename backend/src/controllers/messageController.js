@@ -1,6 +1,8 @@
 const messageService = require('../services/messageService');
 const roomService = require('../services/roomService');
 
+const getUserRoom = (username) => `user:${username}`;
+
 const fetchMessages = async (req, res, next) => {
   try {
     await roomService.assertRoomMember(req.query.roomId, req.user);
@@ -13,12 +15,25 @@ const fetchMessages = async (req, res, next) => {
 
 const sendMessage = async (req, res, next) => {
   try {
-    await roomService.assertRoomMember(req.body.roomId, req.user);
+    const room = await roomService.assertRoomMember(req.body.roomId, req.user);
     const message = await messageService.createMessage({
       ...req.body,
       username: req.user.username,
     });
-    req.app.get('io')?.to(message.roomId).emit('message:new', message);
+    const io = req.app.get('io');
+    io?.to(message.roomId).emit('message:new', message);
+    if (room.type === 'direct') {
+      const receivers = room.members.filter((member) => member !== req.user.username);
+      await Promise.all(
+        receivers.map(async (receiver) => {
+          const counts = await messageService.countUnreadByRoomIds(receiver, [message.roomId]);
+          io?.to(getUserRoom(receiver)).emit('unread:update', {
+            roomId: message.roomId,
+            unreadCount: counts.get(message.roomId) || 0,
+          });
+        })
+      );
+    }
     res.status(201).json({ message });
   } catch (error) {
     next(error);
@@ -29,10 +44,16 @@ const readMessages = async (req, res, next) => {
   try {
     await roomService.assertRoomMember(req.body.roomId, req.user);
     const messages = await messageService.markMessagesRead(req.user.username, req.body.roomId);
-    req.app
-      .get('io')
-      ?.to(req.body.roomId)
-      .emit('messages:read', { username: req.user.username, roomId: req.body.roomId, messages });
+    const io = req.app.get('io');
+    io?.to(req.body.roomId).emit('messages:read', {
+      username: req.user.username,
+      roomId: req.body.roomId,
+      messages,
+    });
+    io?.to(getUserRoom(req.user.username)).emit('unread:update', {
+      roomId: req.body.roomId,
+      unreadCount: 0,
+    });
     res.json({ messages });
   } catch (error) {
     next(error);

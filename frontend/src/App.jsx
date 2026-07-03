@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import ChatHeader from './components/ChatHeader';
 import LoginPanel from './components/LoginPanel';
 import MessageComposer from './components/MessageComposer';
@@ -6,14 +7,12 @@ import MessageList from './components/MessageList';
 import UserList from './components/UserList';
 import { useChatSocket } from './hooks/useChatSocket';
 import {
-  approveUser,
   createDirectRoom,
   createRoom,
   deleteMessage,
   editMessage,
   fetchMessages,
   fetchRooms,
-  fetchUsers,
   joinRoom,
   login,
   markMessagesRead,
@@ -34,8 +33,7 @@ const App = () => {
   const [password, setPassword] = useState('');
   const [rooms, setRooms] = useState([]);
   const [activeRoomId, setActiveRoomId] = useState('');
-  const [activePanel, setActivePanel] = useState('phone');
-  const [users, setUsers] = useState([]);
+  const [activePanel, setActivePanel] = useState('');
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomPassword, setNewRoomPassword] = useState('');
   const [newRoomMaxMembers, setNewRoomMaxMembers] = useState('50');
@@ -57,7 +55,6 @@ const App = () => {
     localStorage.removeItem('chat_session');
     setSession(null);
     setRooms([]);
-    setUsers([]);
     setActiveRoomId('');
     setMessages([]);
     setMessageText('');
@@ -101,6 +98,24 @@ const App = () => {
     setMessages(nextMessages);
   }, []);
 
+  const updateRoomUnreadCount = useCallback(({ roomId, unreadCount }) => {
+    setRooms((currentRooms) =>
+      currentRooms.map((room) =>
+        room.id === roomId ? { ...room, unreadCount } : room
+      )
+    );
+  }, []);
+
+  const activeRoom = rooms.find((room) => room.id === activeRoomId);
+  const isDirectPanel = activePanel === 'phone' || activePanel === 'username';
+  const selectedRoom =
+    activeRoom &&
+    ((isDirectPanel && activeRoom.type === 'direct') ||
+      (activePanel === 'rooms' && activeRoom.type !== 'direct'))
+      ? activeRoom
+      : null;
+  const isDirectChat = selectedRoom?.type === 'direct';
+
   const {
     isConnected,
     onlineUsers,
@@ -113,41 +128,44 @@ const App = () => {
   } = useChatSocket({
     token,
     username,
-    roomId: activeRoomId,
+    roomId: selectedRoom?.id || '',
     onMessage: mergeMessage,
     onMessageDelete: removeMessageFromList,
     onMessageUpdate: updateMessageInList,
     onReadUpdate: replaceMessages,
+    onUnreadUpdate: updateRoomUnreadCount,
   });
 
   useEffect(() => {
     if (!session) return;
 
     const loadAccess = async () => {
+      let preferredRoomId = '';
       try {
         setError('');
         const params = new URLSearchParams(window.location.search);
         const inviteRoomId = params.get('room');
         const inviteCode = params.get('invite');
-        let preferredRoomId = '';
         let nextRooms = await fetchRooms(token);
         if (inviteRoomId && inviteCode) {
           const room = await joinRoom({ roomId: inviteRoomId, inviteCode, token });
           preferredRoomId = room.id;
           nextRooms = await fetchRooms(token);
+          setActivePanel('rooms');
           window.history.replaceState({}, '', window.location.pathname);
         }
         setRooms(nextRooms);
         setActiveRoomId((currentRoomId) =>
           preferredRoomId || (nextRooms.some((room) => room.id === currentRoomId) ? currentRoomId : '')
         );
-        if (session.user.role === 'admin') {
-          setUsers(await fetchUsers(token));
-        }
       } catch (loadError) {
         if (handleAuthError(loadError)) return;
         setError(loadError.message);
         setIsLoading(false);
+      } finally {
+        if (!preferredRoomId) {
+          setIsLoading(false);
+        }
       }
     };
 
@@ -155,16 +173,17 @@ const App = () => {
   }, [handleAuthError, session, token]);
 
   useEffect(() => {
-    if (!session || !activeRoomId) return;
+    if (!session || !selectedRoom) return;
 
     const loadMessages = async () => {
       try {
         setError('');
         setIsLoading(true);
-        const history = await fetchMessages({ roomId: activeRoomId, token });
+        const history = await fetchMessages({ roomId: selectedRoom.id, token });
         setMessages(history);
-        const readMessages = await markMessagesRead({ roomId: activeRoomId, token });
+        const readMessages = await markMessagesRead({ roomId: selectedRoom.id, token });
         setMessages(readMessages);
+        updateRoomUnreadCount({ roomId: selectedRoom.id, unreadCount: 0 });
       } catch (loadError) {
         if (handleAuthError(loadError)) return;
         setError(loadError.message);
@@ -174,7 +193,7 @@ const App = () => {
     };
 
     loadMessages();
-  }, [activeRoomId, handleAuthError, session, token]);
+  }, [handleAuthError, selectedRoom, session, token, updateRoomUnreadCount]);
 
   const handleAuthSubmit = async () => {
     const cleanUsername = draftUsername.trim();
@@ -213,6 +232,20 @@ const App = () => {
 
   const handleLogout = () => {
     clearSession();
+  };
+
+  const handlePanelSelect = (panel) => {
+    setActivePanel(panel);
+    setActiveRoomId('');
+    setMessages([]);
+    setMessageText('');
+  };
+
+  const handleConversationBack = () => {
+    setActiveRoomId('');
+    setMessages([]);
+    setMessageText('');
+    stopTyping();
   };
 
   const handleSend = async () => {
@@ -286,7 +319,7 @@ const App = () => {
   const refreshRooms = async (preferredRoomId = '') => {
     const nextRooms = await fetchRooms(token);
     setRooms(nextRooms);
-    setActiveRoomId(preferredRoomId || nextRooms[0]?.id || '');
+    setActiveRoomId(preferredRoomId);
   };
 
   const handleCreateRoom = async () => {
@@ -344,25 +377,6 @@ const App = () => {
     }
   };
 
-  const handleApproveUser = async (id) => {
-    try {
-      setError('');
-      await approveUser({ id, token });
-      setUsers(await fetchUsers(token));
-    } catch (approvalError) {
-      setError(approvalError.message);
-    }
-  };
-
-  const activeRoom = rooms.find((room) => room.id === activeRoomId);
-  const isDirectPanel = activePanel === 'phone' || activePanel === 'username';
-  const selectedRoom =
-    activeRoom &&
-    ((isDirectPanel && activeRoom.type === 'direct') ||
-      (activePanel === 'rooms' && activeRoom.type !== 'direct'))
-      ? activeRoom
-      : null;
-  const isDirectChat = selectedRoom?.type === 'direct';
   const isPeerOnline = isDirectChat && onlineUsers.includes(selectedRoom.peerUsername);
   const activeRoomTitle = isDirectChat
     ? selectedRoom?.peerUsername || selectedRoom?.peerPhone || selectedRoom?.name
@@ -409,48 +423,59 @@ const App = () => {
           {error}
         </div>
       )}
-      <div className="grid min-h-0 grid-cols-1 grid-rows-[auto_1fr] gap-4 px-4 py-4 sm:px-6 lg:grid-cols-[minmax(190px,260px)_1fr] lg:grid-rows-1 lg:gap-[18px] lg:px-10 lg:py-[18px]">
-        <UserList
-          activeRoomId={activeRoomId}
-          activePanel={activePanel}
-          currentUser={session.user}
-          directPhone={directPhone}
-          directUsername={directUsername}
-          joinInviteCode={joinInviteCode}
-          joinPassword={joinPassword}
-          joinRoomCode={joinRoomCode}
-          joinRoomId={joinRoomId}
-          newRoomMaxMembers={newRoomMaxMembers}
-          newRoomName={newRoomName}
-          newRoomPassword={newRoomPassword}
-          onlineUsers={onlineUsers}
-          rooms={rooms}
-          users={users}
-          setActiveRoomId={setActiveRoomId}
-          setActivePanel={setActivePanel}
-          setDirectPhone={setDirectPhone}
-          setDirectUsername={setDirectUsername}
-          setJoinInviteCode={setJoinInviteCode}
-          setJoinPassword={setJoinPassword}
-          setJoinRoomCode={setJoinRoomCode}
-          setJoinRoomId={setJoinRoomId}
-          setNewRoomMaxMembers={setNewRoomMaxMembers}
-          setNewRoomName={setNewRoomName}
-          setNewRoomPassword={setNewRoomPassword}
-          onApproveUser={handleApproveUser}
-          onCreateDirectByPhone={() =>
-            handleCreateDirectRoom(directPhone, () => setDirectPhone(''))
-          }
-          onCreateDirectByUsername={() =>
-            handleCreateDirectRoom(directUsername, () => setDirectUsername(''))
-          }
-          onCreateRoom={handleCreateRoom}
-          onJoinRoom={handleJoinRoom}
-        />
-        <section className="grid min-h-[68vh] grid-rows-[1fr_auto] overflow-hidden rounded-lg border border-[#dce4ef] bg-white lg:min-h-0">
+      <div className={`grid min-h-0 px-4 py-4 sm:px-6 lg:px-10 lg:py-[18px] ${
+        selectedRoom ? '' : 'place-items-center'
+      }`}>
+        {!selectedRoom ? (
+          <div className="w-full max-w-[420px]">
+            <UserList
+              activeRoomId={activeRoomId}
+              activePanel={activePanel}
+              directPhone={directPhone}
+              directUsername={directUsername}
+              joinInviteCode={joinInviteCode}
+              joinPassword={joinPassword}
+              joinRoomCode={joinRoomCode}
+              joinRoomId={joinRoomId}
+              newRoomMaxMembers={newRoomMaxMembers}
+              newRoomName={newRoomName}
+              newRoomPassword={newRoomPassword}
+              onlineUsers={onlineUsers}
+              rooms={rooms}
+              setActiveRoomId={setActiveRoomId}
+              setActivePanel={handlePanelSelect}
+              setDirectPhone={setDirectPhone}
+              setDirectUsername={setDirectUsername}
+              setJoinInviteCode={setJoinInviteCode}
+              setJoinPassword={setJoinPassword}
+              setJoinRoomCode={setJoinRoomCode}
+              setJoinRoomId={setJoinRoomId}
+              setNewRoomMaxMembers={setNewRoomMaxMembers}
+              setNewRoomName={setNewRoomName}
+              setNewRoomPassword={setNewRoomPassword}
+              onCreateDirectByPhone={() =>
+                handleCreateDirectRoom(directPhone, () => setDirectPhone(''))
+              }
+              onCreateDirectByUsername={() =>
+                handleCreateDirectRoom(directUsername, () => setDirectUsername(''))
+              }
+              onCreateRoom={handleCreateRoom}
+              onJoinRoom={handleJoinRoom}
+            />
+          </div>
+        ) : (
+        <section className="grid min-h-[72vh] grid-rows-[1fr_auto] overflow-hidden rounded-lg border border-[#dce4ef] bg-white lg:min-h-0">
           <div className="border-b border-[#dce4ef] px-4 py-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2">
+                <button
+                  className="inline-grid h-9 w-9 flex-none place-items-center rounded-lg bg-[#eef3f8] text-[#344154]"
+                  type="button"
+                  onClick={handleConversationBack}
+                  aria-label="Back to chat options"
+                >
+                  <ArrowLeft size={18} />
+                </button>
                 {isDirectChat && (
                   <span
                     className={`h-[10px] w-[10px] flex-none rounded-full ${
@@ -484,12 +509,6 @@ const App = () => {
           </div>
           {isLoading ? (
             <div className="m-auto text-center text-[#687384]">Loading messages...</div>
-          ) : !selectedRoom ? (
-            <div className="m-auto px-4 text-center text-[#687384]">
-              {activePanel === 'rooms'
-                ? 'Join a room to start conversation.'
-                : 'Select anyone to start conversation.'}
-            </div>
           ) : (
             <div className="grid min-h-0 grid-rows-[auto_1fr]">
               {selectedRoom.type !== 'direct' && (
@@ -538,6 +557,7 @@ const App = () => {
             disabled={isLoading || !selectedRoom}
           />
         </section>
+        )}
       </div>
     </main>
   );

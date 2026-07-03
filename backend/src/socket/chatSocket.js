@@ -11,6 +11,8 @@ const getOnlineUsers = () => {
   return Array.from(users).sort((a, b) => a.localeCompare(b));
 };
 
+const getUserRoom = (username) => `user:${username}`;
+
 const registerChatSocket = (io) => {
   io.use(async (socket, next) => {
     try {
@@ -41,6 +43,7 @@ const registerChatSocket = (io) => {
       const cleanUsername = socket.user.username;
 
       connectedUsers.set(socket.id, cleanUsername);
+      socket.join(getUserRoom(cleanUsername));
       if (roomId) {
         try {
           await roomService.assertRoomMember(roomId, socket.user);
@@ -54,12 +57,24 @@ const registerChatSocket = (io) => {
 
     socket.on('message:send', async (payload, ack) => {
       try {
-        await roomService.assertRoomMember(payload?.roomId, socket.user);
+        const room = await roomService.assertRoomMember(payload?.roomId, socket.user);
         const message = await messageService.createMessage({
           ...payload,
           username: socket.user.username,
         });
         io.to(message.roomId).emit('message:new', message);
+        if (room.type === 'direct') {
+          const receivers = room.members.filter((member) => member !== socket.user.username);
+          await Promise.all(
+            receivers.map(async (receiver) => {
+              const counts = await messageService.countUnreadByRoomIds(receiver, [message.roomId]);
+              io.to(getUserRoom(receiver)).emit('unread:update', {
+                roomId: message.roomId,
+                unreadCount: counts.get(message.roomId) || 0,
+              });
+            })
+          );
+        }
         ack?.({ ok: true, message });
       } catch (error) {
         ack?.({ ok: false, error: error.message || 'Unable to send message.' });
@@ -108,6 +123,10 @@ const registerChatSocket = (io) => {
         await roomService.assertRoomMember(roomId, socket.user);
         const messages = await messageService.markMessagesRead(socket.user.username, roomId);
         io.to(roomId).emit('messages:read', { username: socket.user.username, roomId, messages });
+        io.to(getUserRoom(socket.user.username)).emit('unread:update', {
+          roomId,
+          unreadCount: 0,
+        });
       } catch (error) {
         socket.emit('socket:error', error.message || 'Unable to update read status.');
       }

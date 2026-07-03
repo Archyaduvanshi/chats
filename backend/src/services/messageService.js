@@ -168,6 +168,42 @@ const markMessagesRead = async (username, roomId) => {
     .map(toClientMessage);
 };
 
+const countUnreadByRoomIds = async (username, roomIds) => {
+  const cleanUsername = sanitizeUsername(username);
+  const cleanRoomIds = roomIds.map((roomId) => String(roomId || '').trim()).filter(Boolean);
+  const counts = new Map(cleanRoomIds.map((roomId) => [roomId, 0]));
+
+  if (!cleanUsername || cleanRoomIds.length === 0) return counts;
+
+  if (usingMongo()) {
+    const unreadCounts = await Message.aggregate([
+      {
+        $match: {
+          roomId: { $in: cleanRoomIds },
+          username: { $ne: cleanUsername },
+          readBy: { $ne: cleanUsername },
+        },
+      },
+      { $group: { _id: '$roomId', count: { $sum: 1 } } },
+    ]);
+
+    unreadCounts.forEach((entry) => {
+      counts.set(String(entry._id), entry.count);
+    });
+    return counts;
+  }
+
+  const messages = await readFileMessages();
+  messages.forEach((message) => {
+    const roomId = String(message.roomId || 'lobby');
+    if (!counts.has(roomId)) return;
+    if (message.username === cleanUsername) return;
+    if ((message.readBy || []).includes(cleanUsername)) return;
+    counts.set(roomId, counts.get(roomId) + 1);
+  });
+  return counts;
+};
+
 const updateMessage = async (id, payload) => {
   const { username, text } = sanitizeMessageEdit(payload);
 
@@ -253,6 +289,7 @@ const deleteMessage = async (id, username) => {
 };
 
 module.exports = {
+  countUnreadByRoomIds,
   createMessage,
   deleteMessage,
   getMessages,

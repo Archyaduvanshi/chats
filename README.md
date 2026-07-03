@@ -8,7 +8,9 @@ A full-stack realtime chat app built with React, Node.js, Express, Socket.io, an
 - Admin approval before new users can access chat
 - Room chat with room key, optional password, invite link, member count, and room creator/admin details
 - One-to-one direct chat by phone number or username
+- Centered chat-mode selection screen with only Chat by phone, Chat by username, and Room chat before any message composer is shown
 - Direct chat presence indicators: green check for online users, red dot for offline users
+- Direct chat unread badges beside phone numbers/usernames when the receiver has not opened or read new messages
 - Direct chat message status:
   - Single check when the receiver is offline
   - Double check when the receiver is online
@@ -16,8 +18,10 @@ A full-stack realtime chat app built with React, Node.js, Express, Socket.io, an
 - Room metadata is shown only in room chat, not in phone/username direct chats
 - Direct users must select a phone/username chat before sending a message
 - Room users must create, join, or select a room before sending a message
+- Direct chat history is isolated per two-user conversation, so other users cannot see that private chat
 - REST API for auth, rooms, messages, and read status
 - Socket.io realtime message broadcasting
+- Socket.io online status connects after login, even before a chat is selected
 - Previous messages after refresh
 - Message timestamps
 - Typing indicator
@@ -119,12 +123,16 @@ VITE_SOCKET_URL=http://localhost:5000
 1. The first signed-up user becomes an approved admin.
 2. Later users sign up as pending members.
 3. Admins approve pending users.
-4. Approved users can create rooms, join rooms by room key/password/invite code, or start direct chats by phone/username.
-5. The message composer is disabled until the current chat mode has a valid selected conversation:
+4. Approved users first see a centered chat choice panel with Chat by phone, Chat by username, and Room chat.
+5. Choosing Chat by phone or Chat by username expands previous direct chats under that option, plus an input to start a new direct chat.
+6. Choosing Room chat expands joined rooms and room create/join controls.
+7. Selecting a direct user or room opens a dedicated message page for that conversation.
+8. The message composer is hidden until the current chat mode has a valid selected conversation:
    - Phone/username chat requires a selected direct user.
    - Room chat requires a selected joined or created room.
-6. Direct chats show online/offline presence and WhatsApp-style sent/delivered/read ticks.
-7. Room chats show room key, member count, creator/admin, member list, and invite controls.
+9. Direct chats show online/offline presence, unread message badges, and WhatsApp-style sent/delivered/read ticks.
+10. Unread badges appear only beside phone/username direct chats and clear when that conversation is opened/read.
+11. Room chats show room key, member count, creator/admin, member list, and invite controls.
 
 ## API Endpoints
 
@@ -165,6 +173,8 @@ Example login:
 - `POST /api/rooms` - create a room
 - `POST /api/rooms/join` - join a room by id/code/password/invite
 - `POST /api/rooms/direct` - create or open a direct room by phone or username
+
+Direct rooms returned by `GET /api/rooms` include an `unreadCount` field for the authenticated user. This count is used only in the Chat by phone and Chat by username lists.
 
 Example create room:
 
@@ -245,6 +255,7 @@ Example mark read:
 - `message:delete` - delete a sender's message
 - `message:deleted` - remove a deleted message from clients
 - `users:online` - receive current online usernames
+- `unread:update` - update a direct chat unread badge for a specific room
 - `typing:start` / `typing:stop` - typing indicator
 - `messages:read` - update read status
 
@@ -314,6 +325,13 @@ If direct chat presence does not update:
 - Make sure both users are logged in and connected to Socket.io.
 - Check `VITE_SOCKET_URL`.
 
+If unread direct message counts do not update:
+
+- Restart the backend after pulling the latest socket changes.
+- Make sure the receiver is logged in so Socket.io can deliver `unread:update`.
+- Confirm the conversation is a direct phone/username chat, not a room chat.
+- Opening the direct chat marks its messages as read and clears the badge.
+
 If you see CORS errors:
 
 - Check `CLIENT_URL` in the backend environment.
@@ -343,6 +361,7 @@ If the backend starts but data is not saved:
 - Direct chats are private rooms with exactly two approved users.
 - Encryption is server-side encryption at rest, not end-to-end encryption.
 - Read status is based on users opening a room/direct chat and marking its messages as read.
+- Unread direct counts include messages sent by the other user that the current user has not read.
 
 ## Useful References
 

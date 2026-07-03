@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const Room = require('../models/roomModel');
 const { createId, readStore, writeStore } = require('./fileStore');
 const authService = require('./authService');
+const messageService = require('./messageService');
 
 const usingMongo = () => mongoose.connection.readyState === 1;
 
@@ -50,6 +51,18 @@ const addDirectPeerDetails = async (rooms, currentUsername) => {
       peerPhone: peer?.phone || '',
     };
   });
+};
+
+const addUnreadCounts = async (rooms, currentUsername) => {
+  const directRoomIds = rooms
+    .filter((room) => room.type === 'direct')
+    .map((room) => room.id);
+  const unreadCounts = await messageService.countUnreadByRoomIds(currentUsername, directRoomIds);
+
+  return rooms.map((room) => ({
+    ...room,
+    unreadCount: room.type === 'direct' ? unreadCounts.get(room.id) || 0 : 0,
+  }));
 };
 
 const assignMissingRoomFields = async (room) => {
@@ -131,7 +144,8 @@ const listRoomsForUser = async (user) => {
     const clientRooms = await Promise.all(
       rooms.map(async (room) => toClientRoom(await assignMissingRoomFields(room)))
     );
-    return addDirectPeerDetails(clientRooms, user.username);
+    const roomsWithPeers = await addDirectPeerDetails(clientRooms, user.username);
+    return addUnreadCounts(roomsWithPeers, user.username);
   }
 
   const store = await readStore();
@@ -156,7 +170,8 @@ const listRoomsForUser = async (user) => {
   if (changed) {
     await writeStore(store);
   }
-  return addDirectPeerDetails(rooms, user.username);
+  const roomsWithPeers = await addDirectPeerDetails(rooms, user.username);
+  return addUnreadCounts(roomsWithPeers, user.username);
 };
 
 const createRoom = async ({ name, password, maxMembers }, user) => {
@@ -318,7 +333,8 @@ const createDirectRoom = async ({ username }, user) => {
       [toClientRoom(await assignMissingRoomFields(room))],
       user.username
     );
-    return enrichedRooms[0];
+    const roomsWithUnread = await addUnreadCounts(enrichedRooms, user.username);
+    return roomsWithUnread[0];
   }
 
   const store = await readStore();
@@ -349,7 +365,8 @@ const createDirectRoom = async ({ username }, user) => {
 
   await assignMissingRoomFields(room);
   const enrichedRooms = await addDirectPeerDetails([toClientRoom(room)], user.username);
-  return enrichedRooms[0];
+  const roomsWithUnread = await addUnreadCounts(enrichedRooms, user.username);
+  return roomsWithUnread[0];
 };
 
 module.exports = {
