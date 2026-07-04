@@ -1,10 +1,13 @@
-import { LogIn, MessageCircle, UserPlus } from 'lucide-react';
+import { Eye, EyeOff, LogIn, MessageCircle, UserPlus } from 'lucide-react';
+import { useState } from 'react';
 
 const LoginPanel = ({
   authMode,
+  confirmPassword,
   password,
   phone,
   setAuthMode,
+  setConfirmPassword,
   setPassword,
   setPhone,
   setUsername,
@@ -15,6 +18,10 @@ const LoginPanel = ({
     event.preventDefault();
     onSubmit();
   };
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] = useState(false);
+  const passwordType = isPasswordVisible ? 'text' : 'password';
+  const confirmPasswordType = isConfirmPasswordVisible ? 'text' : 'password';
 
   return (
     <main className="grid min-h-screen place-items-center bg-[#f8fafc] bg-[linear-gradient(135deg,rgba(29,108,138,0.14),transparent_38%),linear-gradient(315deg,rgba(205,95,68,0.14),transparent_42%)] p-6">
@@ -83,16 +90,53 @@ const LoginPanel = ({
           <label className="font-bold" htmlFor="password">
             Password
           </label>
-          <input
-            className="w-full rounded-lg border border-[#ccd7e5] bg-white px-[15px] py-3.5 text-[#18202f] outline-none focus:border-[#1d6c8a] focus:shadow-[0_0_0_3px_rgba(29,108,138,0.14)]"
-            id="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            minLength={6}
-            placeholder="At least 6 characters"
-            type="password"
-            autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
-          />
+          <div className="relative">
+            <input
+              className="w-full rounded-lg border border-[#ccd7e5] bg-white py-3.5 pr-12 pl-[15px] text-[#18202f] outline-none focus:border-[#1d6c8a] focus:shadow-[0_0_0_3px_rgba(29,108,138,0.14)]"
+              id="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              minLength={6}
+              placeholder="At least 6 characters"
+              type={passwordType}
+              autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
+            />
+            <button
+              className="absolute top-1/2 right-2 inline-grid h-9 w-9 -translate-y-1/2 place-items-center rounded-md text-[#687384] hover:bg-[#eef3f8]"
+              type="button"
+              onClick={() => setIsPasswordVisible((isVisible) => !isVisible)}
+              aria-label={isPasswordVisible ? 'Hide password' : 'Show password'}
+            >
+              {isPasswordVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
+          {authMode === 'signup' && (
+            <>
+              <label className="font-bold" htmlFor="confirm-password">
+                Confirm password
+              </label>
+              <div className="relative">
+                <input
+                  className="w-full rounded-lg border border-[#ccd7e5] bg-white py-3.5 pr-12 pl-[15px] text-[#18202f] outline-none focus:border-[#1d6c8a] focus:shadow-[0_0_0_3px_rgba(29,108,138,0.14)]"
+                  id="confirm-password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  minLength={6}
+                  placeholder="Re-enter password"
+                  type={confirmPasswordType}
+                  autoComplete="new-password"
+                />
+                <button
+                  className="absolute top-1/2 right-2 inline-grid h-9 w-9 -translate-y-1/2 place-items-center rounded-md text-[#687384] hover:bg-[#eef3f8]"
+                  type="button"
+                  onClick={() => setIsConfirmPasswordVisible((isVisible) => !isVisible)}
+                  aria-label={isConfirmPasswordVisible ? 'Hide confirm password' : 'Show confirm password'}
+                >
+                  {isConfirmPasswordVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
+            </>
+          )}
           <button
             className="rounded-lg border-0 bg-[#1d6c8a] px-[18px] py-3.5 font-extrabold text-white"
             type="submit"

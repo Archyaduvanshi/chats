@@ -32,6 +32,7 @@ const App = () => {
   );
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [rooms, setRooms] = useState([]);
   const [activeRoomId, setActiveRoomId] = useState('');
   const [activePanel, setActivePanel] = useState('');
@@ -59,6 +60,7 @@ const App = () => {
     setActiveRoomId('');
     setMessages([]);
     setMessageText('');
+    setConfirmPassword('');
     setIsLoading(false);
   }, []);
 
@@ -228,6 +230,10 @@ const App = () => {
       setError('Phone number is required for signup.');
       return;
     }
+    if (authMode === 'signup' && password !== confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
 
     try {
       setError('');
@@ -239,6 +245,7 @@ const App = () => {
       localStorage.setItem('chat_session', JSON.stringify(nextSession));
       setSession(nextSession);
       setPassword('');
+      setConfirmPassword('');
       setPhone('');
     } catch (authError) {
       setError(authError.message);
@@ -427,9 +434,11 @@ const App = () => {
       <>
         <LoginPanel
           authMode={authMode}
+          confirmPassword={confirmPassword}
           password={password}
           phone={phone}
           setAuthMode={setAuthMode}
+          setConfirmPassword={setConfirmPassword}
           setPassword={setPassword}
           setPhone={setPhone}
           username={draftUsername}
