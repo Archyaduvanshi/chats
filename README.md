@@ -1,16 +1,19 @@
 # Realtime Chat Application
 
-A full-stack realtime chat app built with React, Node.js, Express, Socket.io, and optional MongoDB persistence. Users sign up with username, phone, and password, wait for admin approval, then chat in joined rooms or one-to-one direct conversations. Messages are encrypted before storage using AES-256-GCM and decrypted by the backend when serving chat history.
+A full-stack realtime chat app built with React, Node.js, Express, Socket.io, and optional MongoDB persistence. Users sign up with username, phone, and password, then chat immediately in joined rooms or one-to-one direct conversations. Messages are encrypted before storage using AES-256-GCM and decrypted by the backend when serving chat history.
 
 ## Features
 
 - Signup/login with JWT sessions
-- Admin approval before new users can access chat
+- Immediate account access after signup
 - Room chat with room key, optional password, invite link, member count, and room creator/admin details
 - One-to-one direct chat by phone number or username
 - Centered chat-mode selection screen with only Chat by phone, Chat by username, and Room chat before any message composer is shown
 - Direct chat presence indicators: green check for online users, red dot for offline users
 - Direct chat unread badges beside phone numbers/usernames when the receiver has not opened or read new messages
+- Direct chat three-dot options menu with a remove action
+- WhatsApp-style direct chat removal: removing a user hides and clears that conversation only for the current account, without deleting it for the other user
+- Removed direct chats can reappear when either user starts the conversation again, while previously cleared messages stay hidden for the user who removed the chat
 - Direct chat message status:
   - Single check when the receiver is offline
   - Double check when the receiver is online
@@ -18,6 +21,8 @@ A full-stack realtime chat app built with React, Node.js, Express, Socket.io, an
 - Room metadata is shown only in room chat, not in phone/username direct chats
 - Direct users must select a phone/username chat before sending a message
 - Room users must create, join, or select a room before sending a message
+- The composer stays writable after a chat is selected; message loading does not block typing
+- Empty conversations show `No messages yet. Start the conversation.` after history loading completes
 - Direct chat history is isolated per two-user conversation, so other users cannot see that private chat
 - REST API for auth, rooms, messages, and read status
 - Socket.io realtime message broadcasting
@@ -120,19 +125,21 @@ VITE_SOCKET_URL=http://localhost:5000
 
 ## How The App Works
 
-1. The first signed-up user becomes an approved admin.
-2. Later users sign up as pending members.
-3. Admins approve pending users.
-4. Approved users first see a centered chat choice panel with Chat by phone, Chat by username, and Room chat.
-5. Choosing Chat by phone or Chat by username expands previous direct chats under that option, plus an input to start a new direct chat.
-6. Choosing Room chat expands joined rooms and room create/join controls.
-7. Selecting a direct user or room opens a dedicated message page for that conversation.
-8. The message composer is hidden until the current chat mode has a valid selected conversation:
+1. Users sign up or log in with a username/phone and password.
+2. New accounts receive a session immediately after signup.
+3. Signed-in users first see a centered chat choice panel with Chat by phone, Chat by username, and Room chat.
+4. Choosing Chat by phone or Chat by username expands previous direct chats under that option, plus an input to start a new direct chat.
+5. Choosing Room chat expands joined rooms and room create/join controls.
+6. Selecting a direct user or room opens a dedicated message page for that conversation.
+7. The message composer is hidden until the current chat mode has a valid selected conversation:
    - Phone/username chat requires a selected direct user.
    - Room chat requires a selected joined or created room.
+8. After a conversation is selected, the composer is enabled even while messages are being fetched.
 9. Direct chats show online/offline presence, unread message badges, and WhatsApp-style sent/delivered/read ticks.
 10. Unread badges appear only beside phone/username direct chats and clear when that conversation is opened/read.
-11. Room chats show room key, member count, creator/admin, member list, and invite controls.
+11. The three-dot menu on a direct chat lets the current user remove that conversation from their own account only.
+12. Removing a direct chat records a per-user cleared timestamp, so older messages stay hidden for the remover but remain available to the other participant.
+13. Room chats show room key, member count, creator/admin, member list, and invite controls.
 
 ## API Endpoints
 
@@ -143,10 +150,8 @@ VITE_SOCKET_URL=http://localhost:5000
 ### Auth
 
 - `POST /api/auth/signup` - create user
-- `POST /api/auth/login` - login approved user
+- `POST /api/auth/login` - login user
 - `GET /api/auth/me` - get current authenticated user
-- `GET /api/auth/users` - list users, admin only
-- `PATCH /api/auth/users/:id/approve` - approve user, admin only
 
 Example signup:
 
@@ -173,8 +178,11 @@ Example login:
 - `POST /api/rooms` - create a room
 - `POST /api/rooms/join` - join a room by id/code/password/invite
 - `POST /api/rooms/direct` - create or open a direct room by phone or username
+- `DELETE /api/rooms/direct/:roomId` - remove a direct conversation for the authenticated user only
 
 Direct rooms returned by `GET /api/rooms` include an `unreadCount` field for the authenticated user. This count is used only in the Chat by phone and Chat by username lists.
+
+Removing a direct room does not delete the room or messages for the other user. The backend stores per-user visibility/clear metadata and filters history/unread counts for the user who removed the conversation.
 
 Example create room:
 
@@ -204,7 +212,7 @@ Example direct chat:
 }
 ```
 
-The `username` field accepts either an approved user's username or phone number.
+The `username` field accepts either a user's username or phone number.
 
 ### Messages
 
@@ -254,7 +262,8 @@ Example mark read:
 - `message:updated` - receive an edited message
 - `message:delete` - delete a sender's message
 - `message:deleted` - remove a deleted message from clients
-- `users:online` - receive current online usernames
+- `users:online` - receive online usernames visible through shared direct/room conversations
+- `rooms:refresh` - ask clients to reload the room/direct chat list after direct conversation visibility changes
 - `unread:update` - update a direct chat unread badge for a specific room
 - `typing:start` / `typing:stop` - typing indicator
 - `messages:read` - update read status
@@ -305,15 +314,21 @@ After changing Vite environment variables, redeploy the frontend.
 If you see `401 Unauthorized`:
 
 - Log in again; the frontend clears stale sessions when the backend rejects a saved token.
-- Confirm the user is approved by an admin.
 - Confirm API requests include `Authorization: Bearer <token>`.
 
 If messages do not send:
 
 - Make sure a direct user is selected in phone/username chat.
 - Make sure a room is selected in room chat.
+- If the message box is disabled, go back and select the conversation again; the composer should be enabled as soon as a valid chat is selected.
 - Check `VITE_API_URL` and `VITE_SOCKET_URL` in the frontend environment.
 - Confirm both values point to the backend URL.
+
+If a selected chat is stuck on `Loading messages...`:
+
+- Restart the frontend dev server after pulling updates.
+- Confirm the backend is running and `VITE_API_URL` points to it.
+- The app now loads messages by selected room id, so unread badge updates should not keep the chat in a loading loop.
 
 If room chat does not work:
 
@@ -329,8 +344,15 @@ If unread direct message counts do not update:
 
 - Restart the backend after pulling the latest socket changes.
 - Make sure the receiver is logged in so Socket.io can deliver `unread:update`.
+- Make sure clients receive `rooms:refresh` after a hidden direct chat becomes visible again.
 - Confirm the conversation is a direct phone/username chat, not a room chat.
 - Opening the direct chat marks its messages as read and clears the badge.
+
+If a removed direct chat appears again:
+
+- This is expected when either participant starts or sends a new message in that direct conversation.
+- Messages sent before the current user's remove action stay hidden for that user.
+- The other participant's copy of the conversation is not changed by the remove action.
 
 If you see CORS errors:
 
@@ -356,12 +378,14 @@ If the backend starts but data is not saved:
 
 ## Assumptions
 
-- Only approved users can chat.
+- Any signed-in user can chat.
+- Users cannot fetch a global list of other accounts.
 - A user can only read/send messages in rooms they belong to.
-- Direct chats are private rooms with exactly two approved users.
+- Direct chats are private rooms with exactly two users.
+- Direct chat removal is per-user visibility and history filtering, not global deletion.
 - Encryption is server-side encryption at rest, not end-to-end encryption.
 - Read status is based on users opening a room/direct chat and marking its messages as read.
-- Unread direct counts include messages sent by the other user that the current user has not read.
+- Unread direct counts include messages sent by the other user that the current user has not read and that were sent after the current user's direct-chat clear timestamp.
 
 ## Useful References
 

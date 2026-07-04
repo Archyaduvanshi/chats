@@ -9,6 +9,7 @@ export const useChatSocket = ({
   onMessageDelete,
   onMessageUpdate,
   onReadUpdate,
+  onRoomsRefresh,
   onUnreadUpdate,
 }) => {
   const socket = useMemo(() => createChatSocket(token), [token]);
@@ -52,6 +53,7 @@ export const useChatSocket = ({
     socket.on('message:updated', onMessageUpdate);
     socket.on('message:deleted', ({ id }) => onMessageDelete(id));
     socket.on('users:online', setOnlineUsers);
+    socket.on('rooms:refresh', onRoomsRefresh);
     socket.on('unread:update', onUnreadUpdate);
     socket.on('typing:start', handleTypingStart);
     socket.on('typing:stop', handleTypingStop);
@@ -68,6 +70,7 @@ export const useChatSocket = ({
       socket.off('message:updated', onMessageUpdate);
       socket.off('message:deleted');
       socket.off('users:online', setOnlineUsers);
+      socket.off('rooms:refresh', onRoomsRefresh);
       socket.off('unread:update', onUnreadUpdate);
       socket.off('typing:start', handleTypingStart);
       socket.off('typing:stop', handleTypingStop);
@@ -79,6 +82,7 @@ export const useChatSocket = ({
     onMessageDelete,
     onMessageUpdate,
     onReadUpdate,
+    onRoomsRefresh,
     onUnreadUpdate,
     roomId,
     socket,

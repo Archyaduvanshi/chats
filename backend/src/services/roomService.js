@@ -32,6 +32,8 @@ const toClientRoom = (room) => {
     memberCount: raw.members?.length || 0,
     members: raw.members || [],
     admins: raw.admins || [],
+    hiddenFor: raw.hiddenFor || [],
+    clearedAtBy: raw.clearedAtBy || {},
     createdAt: raw.createdAt,
   };
 };
@@ -53,16 +55,30 @@ const addDirectPeerDetails = async (rooms, currentUsername) => {
   });
 };
 
+const stripPrivateRoomFields = (rooms) =>
+  rooms.map(({ hiddenFor, clearedAtBy, ...room }) => room);
+
 const addUnreadCounts = async (rooms, currentUsername) => {
   const directRoomIds = rooms
     .filter((room) => room.type === 'direct')
     .map((room) => room.id);
-  const unreadCounts = await messageService.countUnreadByRoomIds(currentUsername, directRoomIds);
+  const clearedAtByRoomId = new Map(
+    rooms
+      .filter((room) => room.type === 'direct')
+      .map((room) => [room.id, getClearedAtForUser(room, currentUsername)])
+  );
+  const unreadCounts = await messageService.countUnreadByRoomIds(
+    currentUsername,
+    directRoomIds,
+    clearedAtByRoomId
+  );
 
-  return rooms.map((room) => ({
+  const roomsWithUnreadCounts = rooms.map((room) => ({
     ...room,
     unreadCount: room.type === 'direct' ? unreadCounts.get(room.id) || 0 : 0,
   }));
+
+  return stripPrivateRoomFields(roomsWithUnreadCounts);
 };
 
 const assignMissingRoomFields = async (room) => {
@@ -79,6 +95,14 @@ const assignMissingRoomFields = async (room) => {
     room.maxMembers = 50;
     changed = true;
   }
+  if (!room.hiddenFor) {
+    room.hiddenFor = [];
+    changed = true;
+  }
+  if (!room.clearedAtBy) {
+    room.clearedAtBy = {};
+    changed = true;
+  }
   if (changed) {
     if (room.save) {
       await room.save();
@@ -88,6 +112,13 @@ const assignMissingRoomFields = async (room) => {
     }
   }
   return room;
+};
+
+const getClearedAtForUser = (room, username) => {
+  const raw = room.toObject ? room.toObject() : room;
+  const clearedAtBy = raw.clearedAtBy || {};
+  const value = clearedAtBy.get ? clearedAtBy.get(username) : clearedAtBy[username];
+  return value ? new Date(value) : null;
 };
 
 const ensureDefaultRoom = async (username) => {
@@ -140,7 +171,10 @@ const listRoomsForUser = async (user) => {
   await ensureDefaultRoom(user.username);
 
   if (usingMongo()) {
-    const rooms = await Room.find({ members: user.username }).sort({ createdAt: 1 });
+    const rooms = await Room.find({
+      members: user.username,
+      hiddenFor: { $ne: user.username },
+    }).sort({ createdAt: 1 });
     const clientRooms = await Promise.all(
       rooms.map(async (room) => toClientRoom(await assignMissingRoomFields(room)))
     );
@@ -152,6 +186,7 @@ const listRoomsForUser = async (user) => {
   let changed = false;
   const rooms = store.rooms
     .filter((room) => room.members.includes(user.username))
+    .filter((room) => !(room.hiddenFor || []).includes(user.username))
     .map((room) => {
       if (!room.inviteCode) {
         room.inviteCode = createInviteCode();
@@ -163,6 +198,14 @@ const listRoomsForUser = async (user) => {
       }
       if (!room.maxMembers) {
         room.maxMembers = room.type === 'direct' ? 2 : 50;
+        changed = true;
+      }
+      if (!room.hiddenFor) {
+        room.hiddenFor = [];
+        changed = true;
+      }
+      if (!room.clearedAtBy) {
+        room.clearedAtBy = {};
         changed = true;
       }
       return toClientRoom(room);
@@ -322,6 +365,9 @@ const createDirectRoom = async ({ username }, user) => {
         members,
         admins: members,
       });
+    } else {
+      room.hiddenFor = (room.hiddenFor || []).filter((member) => member !== user.username);
+      await room.save();
     }
     const enrichedRooms = await addDirectPeerDetails(
       [toClientRoom(await assignMissingRoomFields(room))],
@@ -350,11 +396,17 @@ const createDirectRoom = async ({ username }, user) => {
       maxMembers: 2,
       members,
       admins: members,
+      hiddenFor: [],
+      clearedAtBy: {},
       createdAt: now,
       updatedAt: now,
     };
     store.rooms.push(room);
     await writeStore(store);
+  } else {
+    room.hiddenFor = (room.hiddenFor || []).filter((member) => member !== user.username);
+    room.updatedAt = new Date().toISOString();
+    await saveFileRoom(room);
   }
 
   await assignMissingRoomFields(room);
@@ -363,11 +415,63 @@ const createDirectRoom = async ({ username }, user) => {
   return roomsWithUnread[0];
 };
 
+const removeDirectRoomForUser = async (roomId, user) => {
+  const room = await findRoom(roomId);
+  if (!room) {
+    throw Object.assign(new Error('Conversation not found.'), { status: 404 });
+  }
+  if (room.type !== 'direct') {
+    throw Object.assign(new Error('Only direct conversations can be removed.'), { status: 400 });
+  }
+  if (!room.members.includes(user.username)) {
+    throw Object.assign(new Error('You do not have access to this conversation.'), { status: 403 });
+  }
+
+  const now = new Date();
+  room.hiddenFor = Array.from(new Set([...(room.hiddenFor || []), user.username]));
+  if (room.clearedAtBy?.set) {
+    room.clearedAtBy.set(user.username, now);
+  } else {
+    room.clearedAtBy = { ...(room.clearedAtBy || {}), [user.username]: now.toISOString() };
+  }
+
+  if (room.save) {
+    await room.save();
+  } else {
+    room.updatedAt = now.toISOString();
+    await saveFileRoom(room);
+  }
+
+  return { id: String(room._id || room.id), removedFor: user.username };
+};
+
+const revealDirectRoomForMembers = async (roomId, usernames = []) => {
+  const room = await findRoom(roomId);
+  if (!room || room.type !== 'direct') return null;
+
+  const visibleUsernames = usernames.filter(Boolean);
+  if (visibleUsernames.length === 0) return toClientRoom(room);
+
+  room.hiddenFor = (room.hiddenFor || []).filter((username) => !visibleUsernames.includes(username));
+
+  if (room.save) {
+    await room.save();
+  } else {
+    room.updatedAt = new Date().toISOString();
+    await saveFileRoom(room);
+  }
+
+  return toClientRoom(room);
+};
+
 module.exports = {
   assertRoomMember,
   createDirectRoom,
   createRoom,
   ensureDefaultRoom,
+  getClearedAtForUser,
   joinRoom,
   listRoomsForUser,
+  removeDirectRoomForUser,
+  revealDirectRoomForMembers,
 };

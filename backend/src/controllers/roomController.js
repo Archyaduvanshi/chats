@@ -36,9 +36,19 @@ const createDirectRoom = async (req, res, next) => {
   }
 };
 
+const removeDirectRoom = async (req, res, next) => {
+  try {
+    const result = await roomService.removeDirectRoomForUser(req.params.roomId, req.user);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createDirectRoom,
   createRoom,
   joinRoom,
   listRooms,
+  removeDirectRoom,
 };

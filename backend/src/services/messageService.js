@@ -122,41 +122,53 @@ const createMessage = async (payload) => {
   return toClientMessage(storedMessage);
 };
 
-const getMessages = async (roomId) => {
+const getMessages = async (roomId, options = {}) => {
   const cleanRoomId = String(roomId || '').trim();
+  const clearedAt = options.clearedAt ? new Date(options.clearedAt) : null;
   if (!cleanRoomId) {
     throw Object.assign(new Error('Room is required.'), { status: 400 });
   }
 
   if (usingMongo()) {
-    const messages = await Message.find({ roomId: cleanRoomId }).sort({ createdAt: 1 }).limit(100);
+    const query = { roomId: cleanRoomId };
+    if (clearedAt) {
+      query.createdAt = { $gt: clearedAt };
+    }
+    const messages = await Message.find(query).sort({ createdAt: 1 }).limit(100);
     return messages.map(toClientMessage);
   }
 
   const messages = await readFileMessages();
   return messages
     .filter((message) => (message.roomId || 'lobby') === cleanRoomId)
+    .filter((message) => !clearedAt || new Date(message.createdAt) > clearedAt)
     .slice(-100)
     .map(toClientMessage);
 };
 
-const markMessagesRead = async (username, roomId) => {
+const markMessagesRead = async (username, roomId, options = {}) => {
   const cleanUsername = sanitizeUsername(username);
   const cleanRoomId = String(roomId || '').trim();
+  const clearedAt = options.clearedAt ? new Date(options.clearedAt) : null;
   if (!cleanUsername) return [];
   if (!cleanRoomId) return [];
 
   if (usingMongo()) {
+    const query = { roomId: cleanRoomId, readBy: { $ne: cleanUsername } };
+    if (clearedAt) {
+      query.createdAt = { $gt: clearedAt };
+    }
     await Message.updateMany(
-      { roomId: cleanRoomId, readBy: { $ne: cleanUsername } },
+      query,
       { $addToSet: { readBy: cleanUsername } }
     );
-    return getMessages(cleanRoomId);
+    return getMessages(cleanRoomId, { clearedAt });
   }
 
   const messages = await readFileMessages();
   const updatedMessages = messages.map((message) => {
     if ((message.roomId || 'lobby') !== cleanRoomId) return message;
+    if (clearedAt && new Date(message.createdAt) <= clearedAt) return message;
     const readBy = message.readBy || [];
     if (readBy.includes(cleanUsername)) return message;
     return { ...message, readBy: [...readBy, cleanUsername], updatedAt: new Date().toISOString() };
@@ -164,11 +176,12 @@ const markMessagesRead = async (username, roomId) => {
   await writeFileMessages(updatedMessages);
   return updatedMessages
     .filter((message) => (message.roomId || 'lobby') === cleanRoomId)
+    .filter((message) => !clearedAt || new Date(message.createdAt) > clearedAt)
     .slice(-100)
     .map(toClientMessage);
 };
 
-const countUnreadByRoomIds = async (username, roomIds) => {
+const countUnreadByRoomIds = async (username, roomIds, clearedAtByRoomId = new Map()) => {
   const cleanUsername = sanitizeUsername(username);
   const cleanRoomIds = roomIds.map((roomId) => String(roomId || '').trim()).filter(Boolean);
   const counts = new Map(cleanRoomIds.map((roomId) => [roomId, 0]));
@@ -176,14 +189,32 @@ const countUnreadByRoomIds = async (username, roomIds) => {
   if (!cleanUsername || cleanRoomIds.length === 0) return counts;
 
   if (usingMongo()) {
+    const match = {
+      roomId: { $in: cleanRoomIds },
+      username: { $ne: cleanUsername },
+      readBy: { $ne: cleanUsername },
+    };
+    const perRoomClearedAt = cleanRoomIds
+      .map((roomId) => [roomId, clearedAtByRoomId.get?.(roomId)])
+      .filter(([, clearedAt]) => clearedAt);
+
+    const pipeline =
+      perRoomClearedAt.length > 0
+        ? [
+            { $match: match },
+            {
+              $match: {
+                $or: cleanRoomIds.map((roomId) => {
+                  const clearedAt = clearedAtByRoomId.get?.(roomId);
+                  return clearedAt ? { roomId, createdAt: { $gt: clearedAt } } : { roomId };
+                }),
+              },
+            },
+          ]
+        : [{ $match: match }];
+
     const unreadCounts = await Message.aggregate([
-      {
-        $match: {
-          roomId: { $in: cleanRoomIds },
-          username: { $ne: cleanUsername },
-          readBy: { $ne: cleanUsername },
-        },
-      },
+      ...pipeline,
       { $group: { _id: '$roomId', count: { $sum: 1 } } },
     ]);
 
@@ -197,6 +228,8 @@ const countUnreadByRoomIds = async (username, roomIds) => {
   messages.forEach((message) => {
     const roomId = String(message.roomId || 'lobby');
     if (!counts.has(roomId)) return;
+    const clearedAt = clearedAtByRoomId.get?.(roomId);
+    if (clearedAt && new Date(message.createdAt) <= clearedAt) return;
     if (message.username === cleanUsername) return;
     if ((message.readBy || []).includes(cleanUsername)) return;
     counts.set(roomId, counts.get(roomId) + 1);

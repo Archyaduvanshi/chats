@@ -75,12 +75,24 @@ const registerChatSocket = (io) => {
           ...payload,
           username: socket.user.username,
         });
+        const visibleRoom =
+          room.type === 'direct'
+            ? await roomService.revealDirectRoomForMembers(message.roomId, room.members)
+            : room;
         io.to(message.roomId).emit('message:new', message);
         if (room.type === 'direct') {
+          room.members.forEach((member) => {
+            io.to(getUserRoom(member)).emit('rooms:refresh');
+          });
           const receivers = room.members.filter((member) => member !== socket.user.username);
           await Promise.all(
             receivers.map(async (receiver) => {
-              const counts = await messageService.countUnreadByRoomIds(receiver, [message.roomId]);
+              const clearedAt = roomService.getClearedAtForUser(visibleRoom, receiver);
+              const counts = await messageService.countUnreadByRoomIds(
+                receiver,
+                [message.roomId],
+                new Map([[message.roomId, clearedAt]])
+              );
               io.to(getUserRoom(receiver)).emit('unread:update', {
                 roomId: message.roomId,
                 unreadCount: counts.get(message.roomId) || 0,
@@ -133,9 +145,14 @@ const registerChatSocket = (io) => {
 
     socket.on('messages:read', async ({ roomId } = {}) => {
       try {
-        await roomService.assertRoomMember(roomId, socket.user);
-        const messages = await messageService.markMessagesRead(socket.user.username, roomId);
-        io.to(roomId).emit('messages:read', { username: socket.user.username, roomId, messages });
+        const room = await roomService.assertRoomMember(roomId, socket.user);
+        const clearedAt = room.type === 'direct' ? roomService.getClearedAtForUser(room, socket.user.username) : null;
+        const messages = await messageService.markMessagesRead(socket.user.username, roomId, { clearedAt });
+        io.to(getUserRoom(socket.user.username)).emit('messages:read', {
+          username: socket.user.username,
+          roomId,
+          messages,
+        });
         io.to(getUserRoom(socket.user.username)).emit('unread:update', {
           roomId,
           unreadCount: 0,

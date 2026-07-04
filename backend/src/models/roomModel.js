@@ -41,6 +41,15 @@ const roomSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    hiddenFor: {
+      type: [String],
+      default: [],
+    },
+    clearedAtBy: {
+      type: Map,
+      of: Date,
+      default: {},
+    },
   },
   { timestamps: true }
 );

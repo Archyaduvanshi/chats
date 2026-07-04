@@ -27,7 +27,7 @@ const LoginPanel = ({
         </div>
         <h1 className="mt-6 mb-0 text-3xl font-bold">Realtime Chat</h1>
         <p className="mt-2 mb-7 text-[#687384]">
-          Sign in to access approved rooms and private chats.
+          Sign in or create an account to start chatting.
         </p>
         <div className="mb-4 grid grid-cols-2 rounded-lg border border-[#dce4ef] bg-[#eef3f8] p-1">
           <button

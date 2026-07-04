@@ -1,4 +1,5 @@
 import { Send } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 
 const MessageComposer = ({
   value,
@@ -8,6 +9,14 @@ const MessageComposer = ({
   onStopTyping,
   disabled,
 }) => {
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (!disabled) {
+      inputRef.current?.focus();
+    }
+  }, [disabled]);
+
   const handleSubmit = (event) => {
     event.preventDefault();
     onSubmit();
@@ -19,6 +28,7 @@ const MessageComposer = ({
       onSubmit={handleSubmit}
     >
       <input
+        ref={inputRef}
         className="min-h-[46px] w-full rounded-lg border border-[#ccd7e5] bg-white px-3.5 text-[#18202f] outline-none focus:border-[#1d6c8a] focus:shadow-[0_0_0_3px_rgba(29,108,138,0.14)]"
         value={value}
         onChange={(event) => {

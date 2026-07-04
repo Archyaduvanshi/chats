@@ -66,6 +66,12 @@ export const createDirectRoom = async ({ username, token }) => {
   return data.room;
 };
 
+export const removeDirectRoom = async ({ roomId, token }) =>
+  request(`/api/rooms/direct/${encodeURIComponent(roomId)}`, {
+    method: 'DELETE',
+    token,
+  });
+
 export const fetchMessages = async ({ roomId, token }) => {
   const data = await request(`/api/messages?roomId=${encodeURIComponent(roomId)}`, { token });
   return data.messages || [];

@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Hash, Lock, Phone, UserCheck, X } from 'lucide-react';
+import { Check, ChevronDown, Hash, Lock, MoreVertical, Phone, Trash2, UserCheck, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 const optionClass = (isActive) =>
@@ -44,6 +44,55 @@ const UnreadBadge = ({ count }) => {
   );
 };
 
+const DirectRoomItem = ({
+  activeRoomId,
+  displayValue,
+  isMenuOpen,
+  isOnline,
+  onRemove,
+  onSelect,
+  onToggleMenu,
+  room,
+}) => (
+  <div
+    className={`relative grid grid-cols-[1fr_36px] items-center rounded-lg text-sm font-bold ${
+      activeRoomId === room.id ? 'bg-[#e7f3f7] text-[#144b5d]' : 'bg-[#eef3f8] text-[#344154]'
+    }`}
+  >
+    <button
+      className="flex min-h-10 min-w-0 items-center gap-2 rounded-l-lg px-3 py-2 text-left"
+      type="button"
+      onClick={onSelect}
+    >
+      <DirectPresence isOnline={isOnline} />
+      <span className="min-w-0 truncate">{displayValue || room.name}</span>
+      <span className="ml-auto">
+        <UnreadBadge count={room.unreadCount} />
+      </span>
+    </button>
+    <button
+      className="inline-grid h-10 w-9 place-items-center rounded-r-lg text-[#687384] hover:bg-white/70"
+      type="button"
+      onClick={onToggleMenu}
+      aria-label={`Open options for ${displayValue || room.name}`}
+    >
+      <MoreVertical size={17} />
+    </button>
+    {isMenuOpen && (
+      <div className="absolute right-1 top-10 z-10 w-36 rounded-lg border border-[#dce4ef] bg-white p-1 shadow-[0_12px_30px_rgba(25,32,46,0.16)]">
+        <button
+          className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm font-bold text-[#8d2a1d] hover:bg-[#fff2ef]"
+          type="button"
+          onClick={onRemove}
+        >
+          <Trash2 size={15} />
+          Remove
+        </button>
+      </div>
+    )}
+  </div>
+);
+
 const UserList = ({
   activeRoomId,
   activePanel,
@@ -71,11 +120,13 @@ const UserList = ({
   onCreateDirectByUsername,
   onCreateRoom,
   onJoinRoom,
+  onRemoveDirectRoom,
 }) => {
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [roomAction, setRoomAction] = useState('');
   const [createdRoom, setCreatedRoom] = useState(null);
   const [createdRoomPassword, setCreatedRoomPassword] = useState('');
+  const [openDirectMenuId, setOpenDirectMenuId] = useState('');
 
   const directRooms = useMemo(
     () => rooms.filter((room) => room.type === 'direct'),
@@ -88,7 +139,18 @@ const UserList = ({
   const onlineUserSet = useMemo(() => new Set(onlineUsers), [onlineUsers]);
 
   const togglePanel = (panel) => {
+    setOpenDirectMenuId('');
     setActivePanel(panel);
+  };
+
+  const handleSelectDirectRoom = (roomId) => {
+    setOpenDirectMenuId('');
+    setActiveRoomId(roomId);
+  };
+
+  const handleRemoveDirectRoom = (roomId) => {
+    setOpenDirectMenuId('');
+    onRemoveDirectRoom(roomId);
   };
 
   const handleCreateRoom = async () => {
@@ -126,20 +188,19 @@ const UserList = ({
               {directRooms.length > 0 && (
                 <div className="grid gap-1.5">
                   {directRooms.map((room) => (
-                      <button
-                        className={`flex min-h-10 items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold ${
-                          activeRoomId === room.id ? 'bg-[#e7f3f7] text-[#144b5d]' : 'bg-[#eef3f8] text-[#344154]'
-                        }`}
-                        key={room.id}
-                        type="button"
-                        onClick={() => setActiveRoomId(room.id)}
-                      >
-                        <DirectPresence isOnline={onlineUserSet.has(room.peerUsername)} />
-                        <span className="min-w-0 truncate">{room.peerUsername || room.name}</span>
-                        <span className="ml-auto">
-                          <UnreadBadge count={room.unreadCount} />
-                        </span>
-                      </button>
+                    <DirectRoomItem
+                      activeRoomId={activeRoomId}
+                      displayValue={room.peerPhone || room.peerUsername}
+                      isMenuOpen={openDirectMenuId === `phone-${room.id}`}
+                      isOnline={onlineUserSet.has(room.peerUsername)}
+                      key={room.id}
+                      onRemove={() => handleRemoveDirectRoom(room.id)}
+                      onSelect={() => handleSelectDirectRoom(room.id)}
+                      onToggleMenu={() =>
+                        setOpenDirectMenuId(openDirectMenuId === `phone-${room.id}` ? '' : `phone-${room.id}`)
+                      }
+                      room={room}
+                    />
                     ))}
                 </div>
               )}
@@ -172,20 +233,21 @@ const UserList = ({
               {directRooms.length > 0 && (
                 <div className="grid gap-1.5">
                   {directRooms.map((room) => (
-                    <button
-                      className={`flex min-h-10 items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold ${
-                        activeRoomId === room.id ? 'bg-[#e7f3f7] text-[#144b5d]' : 'bg-[#eef3f8] text-[#344154]'
-                      }`}
+                    <DirectRoomItem
+                      activeRoomId={activeRoomId}
+                      displayValue={room.peerUsername || room.peerPhone}
+                      isMenuOpen={openDirectMenuId === `username-${room.id}`}
+                      isOnline={onlineUserSet.has(room.peerUsername)}
                       key={room.id}
-                      type="button"
-                      onClick={() => setActiveRoomId(room.id)}
-                    >
-                      <DirectPresence isOnline={onlineUserSet.has(room.peerUsername)} />
-                      <span className="min-w-0 truncate">{room.peerUsername || room.name}</span>
-                      <span className="ml-auto">
-                        <UnreadBadge count={room.unreadCount} />
-                      </span>
-                    </button>
+                      onRemove={() => handleRemoveDirectRoom(room.id)}
+                      onSelect={() => handleSelectDirectRoom(room.id)}
+                      onToggleMenu={() =>
+                        setOpenDirectMenuId(
+                          openDirectMenuId === `username-${room.id}` ? '' : `username-${room.id}`
+                        )
+                      }
+                      room={room}
+                    />
                   ))}
                 </div>
               )}

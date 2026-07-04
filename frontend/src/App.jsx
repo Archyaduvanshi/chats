@@ -16,6 +16,7 @@ import {
   joinRoom,
   login,
   markMessagesRead,
+  removeDirectRoom,
   sendMessage,
   signup,
 } from './services/api';
@@ -101,20 +102,31 @@ const App = () => {
   const updateRoomUnreadCount = useCallback(({ roomId, unreadCount }) => {
     setRooms((currentRooms) =>
       currentRooms.map((room) =>
-        room.id === roomId ? { ...room, unreadCount } : room
+        room.id === roomId && room.unreadCount !== unreadCount
+          ? { ...room, unreadCount }
+          : room
       )
     );
   }, []);
 
   const activeRoom = rooms.find((room) => room.id === activeRoomId);
-  const isDirectPanel = activePanel === 'phone' || activePanel === 'username';
-  const selectedRoom =
-    activeRoom &&
-    ((isDirectPanel && activeRoom.type === 'direct') ||
-      (activePanel === 'rooms' && activeRoom.type !== 'direct'))
-      ? activeRoom
-      : null;
+  const selectedRoom = activeRoom || null;
+  const selectedRoomId = selectedRoom?.id || '';
   const isDirectChat = selectedRoom?.type === 'direct';
+
+  const reloadRooms = useCallback(async () => {
+    if (!token) return;
+    try {
+      const nextRooms = await fetchRooms(token);
+      setRooms(nextRooms);
+      setActiveRoomId((currentRoomId) =>
+        nextRooms.some((room) => room.id === currentRoomId) ? currentRoomId : ''
+      );
+    } catch (loadError) {
+      if (handleAuthError(loadError)) return;
+      setError(loadError.message);
+    }
+  }, [handleAuthError, token]);
 
   const {
     isConnected,
@@ -133,6 +145,7 @@ const App = () => {
     onMessageDelete: removeMessageFromList,
     onMessageUpdate: updateMessageInList,
     onReadUpdate: replaceMessages,
+    onRoomsRefresh: reloadRooms,
     onUnreadUpdate: updateRoomUnreadCount,
   });
 
@@ -173,27 +186,37 @@ const App = () => {
   }, [handleAuthError, session, token]);
 
   useEffect(() => {
-    if (!session || !selectedRoom) return;
+    if (!session || !selectedRoomId) return;
+
+    let isCurrentLoad = true;
 
     const loadMessages = async () => {
       try {
         setError('');
         setIsLoading(true);
-        const history = await fetchMessages({ roomId: selectedRoom.id, token });
+        const history = await fetchMessages({ roomId: selectedRoomId, token });
+        if (!isCurrentLoad) return;
         setMessages(history);
-        const readMessages = await markMessagesRead({ roomId: selectedRoom.id, token });
+        const readMessages = await markMessagesRead({ roomId: selectedRoomId, token });
+        if (!isCurrentLoad) return;
         setMessages(readMessages);
-        updateRoomUnreadCount({ roomId: selectedRoom.id, unreadCount: 0 });
+        updateRoomUnreadCount({ roomId: selectedRoomId, unreadCount: 0 });
       } catch (loadError) {
         if (handleAuthError(loadError)) return;
         setError(loadError.message);
       } finally {
-        setIsLoading(false);
+        if (isCurrentLoad) {
+          setIsLoading(false);
+        }
       }
     };
 
     loadMessages();
-  }, [handleAuthError, selectedRoom, session, token, updateRoomUnreadCount]);
+
+    return () => {
+      isCurrentLoad = false;
+    };
+  }, [handleAuthError, selectedRoomId, session, token, updateRoomUnreadCount]);
 
   const handleAuthSubmit = async () => {
     const cleanUsername = draftUsername.trim();
@@ -213,14 +236,6 @@ const App = () => {
           ? await login({ username: cleanUsername, password })
           : await signup({ username: cleanUsername, phone, password });
 
-      if (!nextSession.token) {
-        setError('Account created. Waiting for admin approval before login.');
-        setAuthMode('login');
-        setPassword('');
-        setPhone('');
-        return;
-      }
-
       localStorage.setItem('chat_session', JSON.stringify(nextSession));
       setSession(nextSession);
       setPassword('');
@@ -239,12 +254,14 @@ const App = () => {
     setActiveRoomId('');
     setMessages([]);
     setMessageText('');
+    setIsLoading(false);
   };
 
   const handleConversationBack = () => {
     setActiveRoomId('');
     setMessages([]);
     setMessageText('');
+    setIsLoading(false);
     stopTyping();
   };
 
@@ -377,6 +394,24 @@ const App = () => {
     }
   };
 
+  const handleRemoveDirectRoom = async (roomId) => {
+    try {
+      setError('');
+      await removeDirectRoom({ roomId, token });
+      setRooms((currentRooms) => currentRooms.filter((room) => room.id !== roomId));
+      if (activeRoomId === roomId) {
+        setActiveRoomId('');
+        setMessages([]);
+        setMessageText('');
+        setIsLoading(false);
+        stopTyping();
+      }
+    } catch (roomError) {
+      if (handleAuthError(roomError)) return;
+      setError(roomError.message);
+    }
+  };
+
   const isPeerOnline = isDirectChat && onlineUsers.includes(selectedRoom.peerUsername);
   const activeRoomTitle = isDirectChat
     ? selectedRoom?.peerUsername || selectedRoom?.peerPhone || selectedRoom?.name
@@ -461,6 +496,7 @@ const App = () => {
               }
               onCreateRoom={handleCreateRoom}
               onJoinRoom={handleJoinRoom}
+              onRemoveDirectRoom={handleRemoveDirectRoom}
             />
           </div>
         ) : (
@@ -554,7 +590,7 @@ const App = () => {
             onSubmit={handleSend}
             onTyping={startTyping}
             onStopTyping={stopTyping}
-            disabled={isLoading || !selectedRoom}
+            disabled={!selectedRoom}
           />
         </section>
         )}

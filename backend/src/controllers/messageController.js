@@ -5,8 +5,9 @@ const getUserRoom = (username) => `user:${username}`;
 
 const fetchMessages = async (req, res, next) => {
   try {
-    await roomService.assertRoomMember(req.query.roomId, req.user);
-    const messages = await messageService.getMessages(req.query.roomId);
+    const room = await roomService.assertRoomMember(req.query.roomId, req.user);
+    const clearedAt = room.type === 'direct' ? roomService.getClearedAtForUser(room, req.user.username) : null;
+    const messages = await messageService.getMessages(req.query.roomId, { clearedAt });
     res.json({ messages });
   } catch (error) {
     next(error);
@@ -20,13 +21,25 @@ const sendMessage = async (req, res, next) => {
       ...req.body,
       username: req.user.username,
     });
+    const visibleRoom =
+      room.type === 'direct'
+        ? await roomService.revealDirectRoomForMembers(message.roomId, room.members)
+        : room;
     const io = req.app.get('io');
     io?.to(message.roomId).emit('message:new', message);
     if (room.type === 'direct') {
+      room.members.forEach((member) => {
+        io?.to(getUserRoom(member)).emit('rooms:refresh');
+      });
       const receivers = room.members.filter((member) => member !== req.user.username);
       await Promise.all(
         receivers.map(async (receiver) => {
-          const counts = await messageService.countUnreadByRoomIds(receiver, [message.roomId]);
+          const clearedAt = roomService.getClearedAtForUser(visibleRoom, receiver);
+          const counts = await messageService.countUnreadByRoomIds(
+            receiver,
+            [message.roomId],
+            new Map([[message.roomId, clearedAt]])
+          );
           io?.to(getUserRoom(receiver)).emit('unread:update', {
             roomId: message.roomId,
             unreadCount: counts.get(message.roomId) || 0,
@@ -42,10 +55,11 @@ const sendMessage = async (req, res, next) => {
 
 const readMessages = async (req, res, next) => {
   try {
-    await roomService.assertRoomMember(req.body.roomId, req.user);
-    const messages = await messageService.markMessagesRead(req.user.username, req.body.roomId);
+    const room = await roomService.assertRoomMember(req.body.roomId, req.user);
+    const clearedAt = room.type === 'direct' ? roomService.getClearedAtForUser(room, req.user.username) : null;
+    const messages = await messageService.markMessagesRead(req.user.username, req.body.roomId, { clearedAt });
     const io = req.app.get('io');
-    io?.to(req.body.roomId).emit('messages:read', {
+    io?.to(getUserRoom(req.user.username)).emit('messages:read', {
       username: req.user.username,
       roomId: req.body.roomId,
       messages,
